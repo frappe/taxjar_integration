@@ -115,9 +115,9 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2021-11-30 12:17:24.647979",
+ "modified": "2022-11-21 12:17:24.647979",
  "modified_by": "Administrator",
- "module": "ERPNext Integrations",
+ "module": "Taxjar Integration",
  "name": "TaxJar Settings",
  "owner": "Administrator",
  "permissions": [

@@ -43,9 +43,9 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2021-08-24 09:10:25.313642",
+ "modified": "2022-09-21 09:10:25.313642",
  "modified_by": "Administrator",
- "module": "ERPNext Integrations",
+ "module": "Taxjar Integration",
  "name": "Product Tax Category",
  "owner": "Administrator",
  "permissions": [

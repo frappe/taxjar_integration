@@ -104,12 +104,12 @@ app_license = "MIT"
 
 doc_events = {
 	"Sales Invoice": {
-		"on_submit": "taxjar_integration.erpnext_integrations.taxjar_integration.create_transaction",
-		"on_cancel": "taxjar_integration.erpnext_integrations.taxjar_integration.delete_transaction",
+		"on_submit": "taxjar_integration.taxjar_integration.taxjar_integration.create_transaction",
+		"on_cancel": "taxjar_integration.taxjar_integration.taxjar_integration.delete_transaction",
 		"on_trash": "method"
 	},
 	("Quotation", "Sales Order", "Sales Invoice"): {
-		"validate": ["taxjar_integration.erpnext_integrations.taxjar_integration.set_sales_tax"]
+		"validate": ["taxjar_integration.taxjar_integration.taxjar_integration.set_sales_tax"]
 	},
 }
 
