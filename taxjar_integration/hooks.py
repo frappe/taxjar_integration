@@ -7,6 +7,8 @@ app_description = "Taxjar Integration with ERPNext"
 app_email = "hello@frappe.io"
 app_license = "MIT"
 
+required_apps = ["erpnext"]
+
 # Includes in <head>
 # ------------------
 
