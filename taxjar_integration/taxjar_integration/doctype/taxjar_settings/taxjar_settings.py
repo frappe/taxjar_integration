@@ -4,6 +4,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
@@ -13,18 +14,36 @@ from frappe.permissions import add_permission, update_permission_property
 from taxjar_integration.taxjar_integration.taxjar_integration import get_client
 
 
+BASE_DIR = Path(__file__).resolve().parent
+PRODUCT_TAX_CATEGORY_DATA_FILE = (BASE_DIR / "product_tax_category_data.json").resolve()
+
+
 class TaxJarSettings(Document):
 	def on_update(self):
 		TAXJAR_CREATE_TRANSACTIONS = self.taxjar_create_transactions
 		TAXJAR_CALCULATE_TAX = self.taxjar_calculate_tax
 		TAXJAR_SANDBOX_MODE = self.is_sandbox
 
+		# fields_already_exist = frappe.db.exists(
+		# 	"Custom Field",
+		# 	filters={"dt": ("in", ["Item", "Sales Invoice Item"]), "fieldname": "product_tax_category"},
+		# )
+		# fields_hidden = frappe.get_value(
+		# 	"Custom Field", filters={"dt": ("in", ["Sales Invoice Item"])}, fieldname="hidden"
+		# )
+
 		fields_already_exist = frappe.db.exists(
 			"Custom Field",
-			{"dt": ("in", ["Item", "Sales Invoice Item"]), "fieldname": "product_tax_category"},
+			{
+				"dt": ["in", ["Item", "Sales Invoice Item"]],
+				"fieldname": "product_tax_category",
+			},
 		)
-		fields_hidden = frappe.get_value(
-			"Custom Field", {"dt": ("in", ["Sales Invoice Item"])}, "hidden"
+
+		fields_hidden = frappe.db.get_value(
+			"Custom Field",
+			{"dt": ["in", ["Sales Invoice Item"]]},
+			"hidden"
 		)
 
 		if TAXJAR_CREATE_TRANSACTIONS or TAXJAR_CALCULATE_TAX or TAXJAR_SANDBOX_MODE:
@@ -66,18 +85,21 @@ class TaxJarSettings(Document):
 def toggle_tax_category_fields(hidden):
 	frappe.set_value(
 		"Custom Field",
-		{"dt": "Sales Invoice Item", "fieldname": "product_tax_category"},
-		"hidden",
-		hidden,
+		filters={"dt": "Sales Invoice Item", "fieldname": "product_tax_category"},
+		fieldname="hidden",
+		value=hidden,
 	)
 	frappe.set_value(
-		"Custom Field", {"dt": "Item", "fieldname": "product_tax_category"}, "hidden", hidden
+		"Custom Field", filters={"dt": "Item", "fieldname": "product_tax_category"}, fieldname="hidden", value=hidden
 	)
 
 
 def add_product_tax_categories():
-	with open(os.path.join(os.path.dirname(__file__), "product_tax_category_data.json"), "r") as f:
-		tax_categories = json.loads(f.read())
+	if PRODUCT_TAX_CATEGORY_DATA_FILE.parent != BASE_DIR or not PRODUCT_TAX_CATEGORY_DATA_FILE.is_file():
+		frappe.throw(frappe._("Product tax category fixture file is missing or invalid"))
+
+	# nosemgrep: frappe-security-file-traversal - fixed local fixture path with validation.
+	tax_categories = json.loads(PRODUCT_TAX_CATEGORY_DATA_FILE.read_text(encoding="utf-8"))
 	create_tax_categories(tax_categories["categories"])
 
 

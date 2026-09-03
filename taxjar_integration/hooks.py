@@ -2,10 +2,26 @@ from . import __version__ as app_version
 
 app_name = "taxjar_integration"
 app_title = "Taxjar Integration"
+app_icon = "octicon octicon-globe"
+app_color = "#0b6e99"
 app_publisher = " Frappe Technologies Pvt. Ltd."
 app_description = "Taxjar Integration with ERPNext"
 app_email = "hello@frappe.io"
 app_license = "MIT"
+app_logo_url = "/assets/taxjar_integration/images/taxjar-integration.svg"
+app_home = "/app/taxjar"
+
+add_to_apps_screen = [
+	{
+		"name": app_name,
+		"logo": app_logo_url,
+		"title": "TaxJar",
+		"route": app_home,
+	}
+]
+
+# Required Apps
+required_apps = ["erpnext"]
 
 # Includes in <head>
 # ------------------
@@ -29,7 +45,7 @@ app_license = "MIT"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -65,6 +81,7 @@ app_license = "MIT"
 
 # before_install = "taxjar_integration.install.before_install"
 # after_install = "taxjar_integration.install.after_install"
+# after_migrate = ["taxjar_integration.setup.sync_desk_metadata"]
 
 # Uninstallation
 # ------------
@@ -187,3 +204,6 @@ doc_events = {
 # auth_hooks = [
 #	"taxjar_integration.auth.validate"
 # ]
+
+# Automatically update python controller files with type annotations for this app.
+export_python_type_annotations = True
