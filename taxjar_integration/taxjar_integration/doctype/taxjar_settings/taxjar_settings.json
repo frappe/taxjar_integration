@@ -6,90 +6,144 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "taxjar_calculate_tax",
-  "is_sandbox",
-  "taxjar_create_transactions",
-  "credentials",
-  "api_key",
-  "cb_keys",
-  "sandbox_api_key",
+  "section_break_rixa",
+  "taxjar_enabled",
+  "setup_complete",
+  "section_general",
+  "api_mode",
+  "column_break_jlec",
+  "enable_taxjar_logging",
+  "log_retention_days",
+  "section_break_mhnl",
+  "table_hvjw",
   "configuration",
-  "company",
-  "column_break_10",
-  "tax_account_head",
-  "configuration_cb",
-  "shipping_account_head",
-  "section_break_12",
+  "company_config",
+  "nexus_tab",
+  "section_state_nexus",
+  "update_nexus_list_btn",
+  "nexus_last_synced",
+  "nexus_html",
+  "product_tax_category_section",
+  "update_product_tax_category_btn",
+  "product_tax_category_html",
+  "section_nexus_raw",
   "nexus"
  ],
  "fields": [
   {
-   "fieldname": "credentials",
+   "fieldname": "section_break_rixa",
    "fieldtype": "Section Break",
-   "label": "Credentials"
+   "label": "Features"
   },
   {
-   "fieldname": "api_key",
-   "fieldtype": "Password",
-   "in_list_view": 1,
-   "label": "Live API Key",
-   "reqd": 1
+   "default": "0",
+   "description": "Master switch for the TaxJar integration. Turn this on, then enable Calculate Sales Tax and/or File Transactions per company in the Company Configuration table below.",
+   "fieldname": "taxjar_enabled",
+   "fieldtype": "Check",
+   "label": "Enable TaxJar"
   },
   {
+   "default": "0",
+   "description": "Set when the guided setup flow is completed. Hides the setup banner on the form.",
+   "fieldname": "setup_complete",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "Setup Complete",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval: doc.taxjar_enabled == 1",
+   "fieldname": "section_general",
+   "fieldtype": "Section Break",
+   "label": "API Config"
+  },
+  {
+   "default": "1",
+   "description": "Records API requests, responses, and errors in <a href=\"/desk/taxjar-api-log\" rel=\"noopener noreferrer\">TaxJar API Log</a>. ",
+   "fieldname": "enable_taxjar_logging",
+   "fieldtype": "Check",
+   "label": "Enable API Logs"
+  },
+  {
+   "default": "15",
+   "depends_on": "eval: doc.enable_taxjar_logging",
+   "description": "Automatically delete API Logs older than specified days.<br> (Set 0 to retain logs)",
+   "fieldname": "log_retention_days",
+   "fieldtype": "Int",
+   "label": "Log Retention (Days)"
+  },
+  {
+   "depends_on": "eval: doc.taxjar_enabled == 1",
    "fieldname": "configuration",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "company_config",
+   "fieldtype": "Table",
+   "label": "Company Configuration",
+   "options": "TaxJar Company Config"
+  },
+  {
+   "default": "Live",
+   "fieldname": "api_mode",
+   "fieldtype": "Select",
+   "label": "API Mode",
+   "options": "\nLive\nSandbox"
+  },
+  {
+   "fieldname": "table_hvjw",
+   "fieldtype": "Table",
+   "label": "API Credentials",
+   "options": "TaxJar API Credential"
+  },
+  {
+   "fieldname": "nexus_tab",
+   "fieldtype": "Tab Break",
+   "label": "Nexus & Product Category"
+  },
+  {
+   "fieldname": "section_state_nexus",
    "fieldtype": "Section Break",
-   "label": "Configuration"
+   "label": "State Nexus"
   },
   {
-   "fieldname": "tax_account_head",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Tax Account Head",
-   "options": "Account",
-   "reqd": 1
+   "fieldname": "update_nexus_list_btn",
+   "fieldtype": "Button",
+   "label": "Update Nexus List"
   },
   {
-   "fieldname": "shipping_account_head",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Shipping Account Head",
-   "options": "Account",
-   "reqd": 1
+   "fieldname": "nexus_last_synced",
+   "fieldtype": "Datetime",
+   "label": "Nexus Last Synced",
+   "read_only": 1,
+   "hidden": 1
   },
   {
-   "default": "0",
-   "depends_on": "taxjar_calculate_tax",
-   "fieldname": "is_sandbox",
-   "fieldtype": "Check",
-   "label": "Sandbox Mode"
+   "fieldname": "nexus_html",
+   "fieldtype": "HTML",
+   "label": "Nexus Regions"
   },
   {
-   "fieldname": "sandbox_api_key",
-   "fieldtype": "Password",
-   "label": "Sandbox API Key"
-  },
-  {
-   "default": "0",
-   "depends_on": "taxjar_calculate_tax",
-   "fieldname": "taxjar_create_transactions",
-   "fieldtype": "Check",
-   "label": "Create TaxJar Transaction"
-  },
-  {
-   "default": "0",
-   "fieldname": "taxjar_calculate_tax",
-   "fieldtype": "Check",
-   "label": "Enable Tax Calculation"
-  },
-  {
-   "fieldname": "cb_keys",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "nexus",
-   "fieldname": "section_break_12",
+   "fieldname": "product_tax_category_section",
    "fieldtype": "Section Break",
-   "label": "Nexus List"
+   "label": "Product Tax Category"
+  },
+  {
+   "fieldname": "update_product_tax_category_btn",
+   "fieldtype": "Button",
+   "label": "Update Product Tax Category List"
+  },
+  {
+   "fieldname": "product_tax_category_html",
+   "fieldtype": "HTML",
+   "label": "Product Tax Category Summary"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_nexus_raw",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Raw Data"
   },
   {
    "fieldname": "nexus",
@@ -99,25 +153,20 @@
    "read_only": 1
   },
   {
-   "fieldname": "configuration_cb",
+   "fieldname": "column_break_jlec",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company"
-  },
-  {
-   "fieldname": "column_break_10",
-   "fieldtype": "Column Break"
+   "depends_on": "eval: doc.taxjar_enabled == 1",
+   "fieldname": "section_break_mhnl",
+   "fieldtype": "Section Break"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2022-11-21 12:17:24.647979",
+ "modified": "2026-08-25 00:00:00.000000",
  "modified_by": "Administrator",
- "module": "Taxjar Integration",
+ "module": "TaxJar Integration",
  "name": "TaxJar Settings",
  "owner": "Administrator",
  "permissions": [
@@ -133,7 +182,9 @@
   }
  ],
  "quick_entry": 1,
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }

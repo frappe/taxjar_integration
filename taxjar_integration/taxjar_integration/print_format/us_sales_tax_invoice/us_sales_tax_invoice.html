@@ -1,0 +1,352 @@
+{#
+	Visual language (fonts, palette, rounded highlight-bg tables, page-break/
+	letterhead/footer wrapper) matches erpnext's own "Sales Invoice with Item
+	Image" (erpnext/accounts/print_format/sales_invoice_with_item_image) -
+	see us_sales_tax_invoice.css. Everything below the item table is this
+	app's own: the nexus/exemption panel, per-line taxability, shipping
+	taxability note, and the optional detailed jurisdiction breakdown.
+#}
+<style>
+	{% include "taxjar_integration/taxjar_integration/print_format/us_sales_tax_invoice/us_sales_tax_invoice.css" %}
+</style>
+
+{% set company_config = get_company_config(doc.company) %}
+{% set shipping_head = company_config.shipping_account_head if company_config else None %}
+{% set tax_head = company_config.tax_account_head if company_config else None %}
+{% set company_abbr = frappe.db.get_value("Company", doc.company, "abbr") %}
+{#
+	Mirrors the precedence check_for_nexus()/set_sales_tax() already apply
+	when filling these fields in (taxjar_integration.py). Gated on
+	taxjar_has_nexus: with no nexus, taxjar_customer_taxable is whatever it
+	was left at by an earlier calculation (check_for_nexus's no-nexus branch
+	never touches it), so treating that as "exempt" here would be wrong -
+	exemption only means something once there is nexus to be exempt from.
+#}
+{% set is_exempt = doc.taxjar_has_nexus and ((not doc.taxjar_customer_taxable) or doc.taxjar_transaction_exempt) %}
+{% set has_tax_data = doc.taxjar_nexus_reason or doc.taxjar_customer_taxable_reason or doc.taxjar_ship_to %}
+
+{% for page in layout %}
+<div class="page-break invoice-page">
+	<div {% if print_settings.repeat_header_footer %} id="header-html" class="hidden-pdf" {% endif %}>
+		{% if letter_head and not no_letterhead %}
+		<div class="letter-head">{{ letter_head }}</div>
+		{% endif %}
+	</div>
+
+	<div class="text-center taxjar-doc-title">
+		<h2>
+			{% if doc.is_return %}{{ _("Credit Note") }}
+			{% elif doc.is_debit_note %}{{ _("Debit Note") }}
+			{% else %}{{ _("Sales Invoice") }}
+			{% endif %}
+		</h2>
+	</div>
+
+	{%- if doc.meta.is_submittable and doc.docstatus == 2 -%}
+	<div class="text-center" document-status="cancelled">
+		<h4 class="mt-20">{{ _("CANCELLED") }}</h4>
+	</div>
+	{%- endif -%}
+	{%- if doc.meta.is_submittable and doc.docstatus == 0 and (print_settings == None or print_settings.add_draft_heading) -%}
+	<div class="text-center" document-status="draft">
+		<h4 class="mt-20">{{ _("DRAFT") }}</h4>
+	</div>
+	{%- endif -%}
+
+	<div class="print-format-body">
+		{#
+			Two real table rows, not one row with each cell growing to
+			whatever height its own content needs - Ship From and
+			Invoice/Due Date are tier 1, Bill To and Ship To are tier 2.
+			A table row's height is set by its tallest cell, so putting Bill
+			To and Ship To in the SAME <tr> guarantees they start at the
+			same y regardless of how many lines Ship From or the date block
+			above them took - no manual offset to keep in sync by hand.
+		#}
+		<table class="info-table">
+			<tr>
+				<td style="width: 55%">
+					<div class="title">{{ _("Ship From") }}</div>
+					<div class="info-text text-bold">{{ doc.company }}</div>
+					{% if doc.company_address_display %}<div class="info-text">{{ doc.company_address_display }}</div>{% endif %}
+				</td>
+				<td style="width: 45%">
+					{#
+						Invoice Number isn't repeated here - it's already on
+						the letterhead.
+					#}
+					<table style="width: 100%">
+						<tr>
+							<td class="title" style="width: 45%">{{ _("Invoice Date") }}</td>
+							<td class="info-text text-right">{{ doc.get_formatted("posting_date") }}</td>
+						</tr>
+						{% if (doc.is_return or doc.is_debit_note) and doc.return_against %}
+						<tr>
+							<td class="title">{{ _("Return Against") }}</td>
+							<td class="info-text text-right">{{ doc.return_against }}</td>
+						</tr>
+						{% endif %}
+						{% if doc.due_date %}
+						<tr>
+							<td class="title">{{ _("Payment Due Date") }}</td>
+							<td class="info-text text-right">{{ doc.get_formatted("due_date") }}</td>
+						</tr>
+						{% endif %}
+						{% if doc.po_no %}
+						<tr>
+							<td class="title">{{ _("PO No") }}</td>
+							<td class="info-text text-right">{{ doc.po_no }}</td>
+						</tr>
+						{% endif %}
+					</table>
+				</td>
+			</tr>
+			<tr>
+				<td style="width: 55%">
+					<div class="title mt-15">{{ _("Bill To") }}</div>
+					<div class="info-text text-bold">{{ doc.customer_name }}</div>
+					{% if doc.address_display %}<div class="info-text">{{ doc.address_display }}</div>{% endif %}
+				</td>
+				<td style="width: 45%">
+					<div class="title mt-15">{{ _("Ship To") }}</div>
+					<div class="info-text text-bold">{{ doc.customer_name }}</div>
+					<div class="info-text">{{ doc.shipping_address or doc.address_display or "" }}</div>
+				</td>
+			</tr>
+		</table>
+
+		<!-- Items Table -->
+		{% set item_naming_by = frappe.db.get_single_value("Stock Settings", "item_naming_by") %}
+		{#
+			List rate / discount here mirror get_line_item_dict() in
+			taxjar_integration.py (the same function that builds the TaxJar
+			API payload) rather than the raw discount_percentage/
+			discount_amount fields directly:
+
+			- list_rate is the pre-discount unit price - max(rate_with_margin,
+			  price_list_rate, rate), not price_list_rate alone, so a line
+			  priced above its price list (margin, or a rate typed directly
+			  with a stale/lower price_list_rate) still shows its real list
+			  price rather than an understated one.
+			- discount is list_rate*qty minus net_amount - net_amount is
+			  ERPNext's own final chargeable figure for the line, so this
+			  reads the same total discount get_line_item_dict() sends to
+			  TaxJar (item-level discount plus this line's share of any
+			  document-level Additional Discount/distributed_discount_amount),
+			  not just the item-level fields. Not clamped to >=0 - on a
+			  return/credit note qty (and so net_amount, and so this whole
+			  subtraction) is negative, and clamping to 0 was silently
+			  zeroing out a real discount rather than just flipping its
+			  sign. abs() at use converts it to a magnitude either way.
+
+			The Discount column only earns its place when at least one line
+			actually has one - on an invoice with no discounts, an all-dash
+			column would just be noise next to Rate.
+		#}
+		{% set ns = namespace(any_item_discount=false) %}
+		{% for item in doc.items %}
+			{% set list_rate = [item.rate_with_margin or 0, item.price_list_rate or 0, item.rate or 0] | max %}
+			{% set list_amount = list_rate * (item.qty or 0) %}
+			{% set line_discount = (list_amount - (item.net_amount or 0)) | abs %}
+			{% if line_discount > 0.005 %}
+				{% set ns.any_item_discount = true %}
+			{% endif %}
+		{% endfor %}
+		<table class="items-table mt-15">
+			<thead class="highlight-bg">
+				<tr>
+					<td class="text-center" style="width: 32px">{{ _("No") }}</td>
+					<td class="text-left">{{ _("Item") }}</td>
+					{% if item_naming_by != "Item Code" %}
+					<td class="text-left">{{ _("Item Code") }}</td>
+					{% endif %}
+					<td class="text-right">{{ _("Quantity") }}</td>
+					<td class="text-right">{{ _("Rate") }}</td>
+					{% if ns.any_item_discount %}
+					<td class="text-right">{{ _("Discount") }}</td>
+					{% endif %}
+					<td class="text-right">{{ _("Amount") }}</td>
+				</tr>
+			</thead>
+			<tbody>
+				{% for item in doc.items %}
+				{% set list_rate = [item.rate_with_margin or 0, item.price_list_rate or 0, item.rate or 0] | max %}
+				{% set list_amount = list_rate * (item.qty or 0) %}
+				{% set line_discount = (list_amount - (item.net_amount or 0)) | abs %}
+				<tr>
+					<td class="text-center">{{ loop.index }}</td>
+					<td class="text-left">
+						{{ item.item_name }}
+						<span class="taxjar-tax-tag">
+							{% if item.product_tax_category == "99999" %}{{ _("Exempt") }}{% else %}{{ _("Taxable") }}{% endif %}
+						</span>
+					</td>
+					{% if item_naming_by != "Item Code" %}
+					<td class="text-left">{{ item.item_code }}</td>
+					{% endif %}
+					<td class="text-right">{{ item.get_formatted("qty", doc) }} {{ item.uom }}</td>
+					<td class="text-right">{{ frappe.utils.fmt_money(list_rate, None, doc.currency) }}</td>
+					{% if ns.any_item_discount %}
+					<td class="text-right">
+						{% if line_discount > 0.005 %}
+							-{{ frappe.utils.fmt_money(line_discount, None, doc.currency) }}
+						{% else %}
+							<span class="text-muted">-</span>
+						{% endif %}
+					</td>
+					{% endif %}
+					<td class="text-right">{{ item.get_formatted("net_amount", doc) }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+
+		{% if print_settings.taxjar_show_tax_breakdown or has_tax_data %}
+		<div class="taxjar-left-column">
+			{% if print_settings.taxjar_show_tax_breakdown %}
+			<div class="taxjar-breakdown-section">
+				<h4>{{ _("Tax Analysis") }}</h4>
+			</div>
+			{% endif %}
+
+			{#
+				When the breakdown table is showing, the status panel below
+				joins it as one continuous card (no gap, no independent
+				rounding of its own) rather than a second separate box - the
+				wrapper's own border/radius/overflow:hidden is what rounds
+				the panel's bottom corners here, same as it already rounds
+				the table's top corners via its header.
+			#}
+			<div class="{{ 'taxjar-analysis-card' if print_settings.taxjar_show_tax_breakdown else '' }}">
+				{% if print_settings.taxjar_show_tax_breakdown %}
+				{{ doc.taxjar_breakdown_html }}
+				{% endif %}
+
+				{% if has_tax_data %}
+				{% set state_label = doc.taxjar_ship_to or _("destination") %}
+				{% if not doc.taxjar_has_nexus %}
+					{% set tj_source_line = _("No nexus in {0}").format(state_label) %}
+				{% elif doc.taxjar_tax_source == "origin" %}
+					{% set tj_source_line = _("Origin-based tax for {0}").format(state_label) %}
+				{% elif doc.taxjar_tax_source == "destination" %}
+					{% set tj_source_line = _("Destination-based tax for {0}").format(state_label) %}
+				{% else %}
+					{% set tj_source_line = _("Nexus present in {0}").format(state_label) %}
+				{% endif %}
+				<div class="taxjar-status-panel {{ 'taxjar-status-panel-attached' if print_settings.taxjar_show_tax_breakdown else '' }}">
+					<div class="taxjar-status-line">{{ tj_source_line }}</div>
+					{% if is_exempt %}
+					{% set customer_exemption_type = frappe.db.get_value("Customer", doc.customer, "taxjar_exemption_type") %}
+					<div>
+						<span class="text-bold">{{ _("Sales Tax Exemption") }}:</span>
+						{{ doc.taxjar_customer_taxable_reason or _("This transaction is exempt from sales tax.") }}
+						{% if customer_exemption_type %}({{ customer_exemption_type }}){% endif %}
+					</div>
+					{% endif %}
+				</div>
+				{% endif %}
+			</div>
+		</div>
+		{% endif %}
+
+		<div class="taxjar-totals-column">
+			<table style="width: 100%; border-collapse: collapse">
+				{#
+					Discount doesn't get its own row here - it's shown per
+					line item instead (see the item table's Discount
+					column), so Net Total (already net of any item-level and,
+					where apply_discount_on is "Net Total", document-level
+					discount) is the right starting figure for a column that
+					has to foot to Grand Total without a discount line to
+					explain the gap.
+				#}
+				<tr class="row-divider">
+					<td class="text-right title" style="padding-right: 12px !important;">{{ _("Net Total") }}:</td>
+					<td class="text-right">{{ doc.get_formatted("net_total", doc) }}</td>
+				</tr>
+				{#
+					Rows are re-bucketed - ad-hoc charges first, then
+					shipping, then the sales tax row itself, then anything
+					unrecognized - rather than printed in doc.taxes' stored
+					order, so a handling fee or other manual charge always
+					reads before Shipping & Forwarding, not wherever it
+					happens to sit on the form.
+				#}
+				{% set ad_hoc_rows = [] %}
+				{% set shipping_rows = [] %}
+				{% set tax_rows = [] %}
+				{% set other_rows = [] %}
+				{% for tax in doc.taxes %}
+					{% if tax.tax_amount or print_settings.print_taxes_with_zero_amount %}
+						{% if shipping_head and tax.account_head == shipping_head %}
+							{% set _ = shipping_rows.append(tax) %}
+						{% elif tax_head and tax.account_head == tax_head %}
+							{% set _ = tax_rows.append(tax) %}
+						{% else %}
+							{% set _ = ad_hoc_rows.append(tax) %}
+						{% endif %}
+					{% endif %}
+				{% endfor %}
+				{%- for tax in ad_hoc_rows + shipping_rows + tax_rows + other_rows -%}
+					{% set is_shipping_row = shipping_head and tax.account_head == shipping_head %}
+					{% set is_ad_hoc_row = tax in ad_hoc_rows %}
+					{#
+						Ledger name, company abbreviation dropped - Frappe
+						Account names are always "{name} - {company_abbr}",
+						so this is a plain suffix strip, not a lookup.
+					#}
+					{% set abbr_suffix = " - " ~ company_abbr if company_abbr else None %}
+					{% set ledger_name = tax.account_head[:-(abbr_suffix|length)] if abbr_suffix and tax.account_head and tax.account_head.endswith(abbr_suffix) else tax.account_head %}
+					<tr class="row-divider">
+						<td class="text-right title" style="padding-right: 12px !important;">
+							{# "Shipping & Forwarding Charges" -> "Shipping & Forwarding" - the row already reads as a charge from context (it's in the totals table), so the trailing word is dropped rather than repeated. #}
+							{{ tax.description[:-8] if is_shipping_row and tax.description.endswith(" Charges") else tax.description }}:
+							{% if is_shipping_row %}
+							<span class="taxjar-line-note">{{ _("Taxable") if doc.taxjar_freight_taxable else _("Not taxable") }}</span>
+							{% elif is_ad_hoc_row and ledger_name %}
+							<span class="taxjar-line-note">{{ ledger_name }}</span>
+							{% endif %}
+						</td>
+						<td class="text-right">{{ tax.get_formatted("tax_amount", doc) }}</td>
+					</tr>
+				{%- endfor -%}
+				<tr class="taxjar-grand-total">
+					<td class="text-right title" style="padding-right: 12px !important;"><b>{{ _("Grand Total") }}:</b></td>
+					<td class="text-right"><b>{{ doc.get_formatted("grand_total", doc) }}</b></td>
+				</tr>
+				{% if not doc.disable_rounded_total and doc.rounded_total and doc.rounded_total != doc.grand_total %}
+				<tr class="row-divider">
+					<td class="text-right title" style="padding-right: 12px !important;">{{ _("Rounded Total") }}:</td>
+					<td class="text-right">{{ doc.get_formatted("rounded_total", doc) }}</td>
+				</tr>
+				{% endif %}
+			</table>
+		</div>
+
+		{% if doc.in_words %}
+		<div class="taxjar-in-words-box" style="clear: both;">
+			<div class="taxjar-in-words-label">{{ _("In Words") }}</div>
+			<div class="in-words">{{ doc.in_words }}</div>
+		</div>
+		{% endif %}
+
+		{% if doc.terms %}
+		<div class="info-card">
+			<div class="title">{{ _("Terms and Conditions") }}</div>
+			{{ doc.terms }}
+		</div>
+		{% endif %}
+	</div>
+
+	<div {% if print_settings.repeat_header_footer %} id="footer-html" class="visible-pdf" {% endif %}>
+		{% if not no_letterhead and footer %}
+		<div class="letter-head-footer">{{ footer }}</div>
+		{% endif %}
+		{% if print_settings.repeat_header_footer %}
+		<p class="text-center small-text page-number visible-pdf">
+			{{ _("Page {0} of {1}").format('<span class="page"></span>', '<span class="topage"></span>') }}
+		</p>
+		{% endif %}
+	</div>
+</div>
+{% endfor %}

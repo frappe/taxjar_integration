@@ -2,5 +2,13 @@
 *.pyc
 *.egg-info
 *.swp
+*.md
 tags
 node_modules
+taxjar_integration/public/dist/
+.vscode/settings.json
+taxjar_integration/taxjar_integration/demo_invoice.py
+.claude
+.agents
+/docs
+skills-lock.json

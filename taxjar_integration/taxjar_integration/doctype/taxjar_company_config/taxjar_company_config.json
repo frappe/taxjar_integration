@@ -1,0 +1,72 @@
+{
+ "actions": [],
+ "creation": "2026-06-09 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "tax_account_head",
+  "shipping_account_head",
+  "taxjar_calculate_tax",
+  "taxjar_create_transactions"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Compute sales tax on this company's Sales Invoices from its nexus, and add Product Tax Category fields to Items.",
+   "fieldname": "taxjar_calculate_tax",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Calculate Sales Tax"
+  },
+  {
+   "default": "0",
+   "description": "Push this company's submitted Sales Invoices to TaxJar for reporting and AutoFile.",
+   "fieldname": "taxjar_create_transactions",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "File Transactions"
+  },
+  {
+   "description": "Sales Tax Ledger where the tax liability will accumulate",
+   "fieldname": "tax_account_head",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Tax Account Head",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "description": "Ledger for booking shipping charges to customers",
+   "fieldname": "shipping_account_head",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shipping Account Head",
+   "options": "Account",
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-16 12:25:04.020147",
+ "modified_by": "Administrator",
+ "module": "TaxJar Integration",
+ "name": "TaxJar Company Config",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

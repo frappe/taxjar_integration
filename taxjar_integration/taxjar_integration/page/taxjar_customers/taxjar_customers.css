@@ -1,0 +1,89 @@
+/* Shared page chrome (summary strip, bulk action button, paginator, and the
+   .taxjar-datatable table furniture this page now shares with the
+   Transaction Sync page's own DataTableManager-backed table) lives in
+   public/scss/taxjar_integration.bundle.scss. Only what is specific to this
+   page stays here. */
+
+/* The count and pencil read as one control, so the button carries no chrome of
+   its own. --icon-stroke is set here rather than inherited: frappe only points
+   it at currentColor inside .btn, and this is deliberately not a .btn. */
+.taxjar-configure-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: none;
+	border: none;
+	padding: 0;
+	color: var(--text-color);
+	cursor: pointer;
+	--icon-stroke: currentColor;
+}
+
+.taxjar-configure-link .icon {
+	/* The sprite's own box is 20px square whatever the size class says. */
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
+.taxjar-configure-link:hover {
+	color: var(--text-on-light-gray);
+}
+
+/* An external identifier, not prose - monospace so a mistyped or truncated id
+   is spottable at a glance. */
+.taxjar-customer-id {
+	font-family: var(--font-stack-monospace, monospace);
+	font-size: var(--text-sm);
+}
+
+/* The Configure Exemption dialog's region pickers are frappe.ui.form
+   MultiCheck fields now - styled by desk's own control CSS plus
+   taxjar_integration._inject_multicheck_column_styles(), not this file. */
+
+/* Sync Status column popover trigger - same pattern as the Transaction Sync
+   page's own copy (taxjar_transactions.css). Failed pairs the pill with a
+   separate small info icon carrying the error; cursor: pointer, not help -
+   "help" draws the browser's own "?" glyph next to the pointer. */
+.taxjar-sync-trigger {
+	cursor: pointer;
+}
+
+.taxjar-sync-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 6px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--text-muted);
+	vertical-align: middle;
+}
+
+.taxjar-sync-icon:hover {
+	color: var(--text-color);
+}
+
+/* Appended to <body>, not the table's own wrapper - deliberately outside its
+   scoping so it isn't clipped by the table/card's overflow, and
+   position: fixed so its coordinates (from getBoundingClientRect(), viewport-
+   relative) don't need scroll-offset math. Shown on hover AND click rather
+   than the native title attribute, which both enforces its own show delay
+   and never responds to a click at all. Kept as its own hand-rolled popover
+   (not frappe.ui.popover) deliberately - it has to survive frappe.DataTable's
+   own row virtualization, which can recycle or redraw the underlying cell at
+   any time, and a real Popover instance is bound to one specific trigger
+   element rather than re-attachable like this delegated listener is. */
+.taxjar-sync-pop {
+	position: fixed;
+	z-index: 1000;
+	max-width: 280px;
+	padding: 8px 12px;
+	border-radius: var(--radius-md);
+	background: var(--fg-color);
+	border: 1px solid var(--border-color);
+	box-shadow: var(--shadow-md);
+	font-size: var(--text-sm);
+	color: var(--text-color);
+}

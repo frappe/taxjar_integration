@@ -1,0 +1,382 @@
+/* TaxJar guided setup — desk page shell.
+   Layout: a single-step panel whose entire content swaps on Save & continue,
+   rendered as plain page flow (no card/box) — it should read as a first-party
+   desk page, not a widget embedded in one. The rail sits at the very top, above
+   the divider: frappe's own Espresso Progress component (intervals form), with
+   a clickable caption per step underneath doubling as navigation. Buttons,
+   status badges, the Sandbox/Live toggle, the nexus banner and empty/loading
+   states are all Espresso components too (.es-button/.es-badge/.es-tab-buttons/
+   .es-alert/.es-popover/.es-skeleton) — their CSS ships with frappe core, so
+   only the surrounding card layout lives in this file. Uses Frappe desk CSS
+   variables so that layout follows the active (light/dark) theme; ink
+   (--text-color) is the structural accent. */
+
+.taxjar-setup {
+	max-width: 880px;
+	margin: 8px auto 40px;
+}
+
+/* The bar itself is frappe's own Espresso Progress (intervals form, size xl) —
+   .es-progress ships its own CSS already loaded on every desk page, so no
+   rule for it lives here. .ts-steps below is this wizard's own addition: a
+   clickable caption per step, the one thing the stock component doesn't do. */
+.taxjar-setup .ts-rail { margin-bottom: 14px; }
+.taxjar-setup .ts-steps {
+	list-style: none; margin: 0; padding: 0;
+	display: flex; gap: 4px;
+}
+.taxjar-setup .ts-steps li { flex: 1 1 0; min-width: 0; }
+.taxjar-setup .ts-step-btn {
+	display: block; width: 100%; border: 0; background: none; padding: 2px 0; cursor: pointer;
+	text-align: center; font-size: 12.5px; color: var(--ink-gray-5, var(--text-muted));
+	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.taxjar-setup .ts-step-btn:disabled { cursor: default; opacity: 0.6; }
+.taxjar-setup .ts-step-btn.filled { color: var(--ink-gray-8, var(--text-color)); }
+.taxjar-setup .ts-step-btn.active { font-weight: 700; }
+.taxjar-setup .ts-step-btn:not(:disabled):hover { color: var(--ink-gray-8, var(--text-color)); }
+
+/* ── panel: single step at a time, rendered as plain page flow (no card) ── */
+.taxjar-setup .ts-panel {
+	display: flex;
+	flex-direction: column;
+	min-height: 420px;
+}
+
+/* Rail first, then the step's heading and its description - the rail is
+   page-level chrome (where am I in the wizard), the heading is the step's own
+   content. It read the other way round while the heading was inside .ts-head,
+   which put a per-step title above the rail that describes every step.
+
+   .ts-title sits between the header and the body rather than inside .ts-body
+   because every _render_*() replaces .ts-body's contents wholesale. */
+.taxjar-setup .ts-head { padding: 24px 0 28px; }
+.taxjar-setup .ts-title { margin: 24px 0 0; font-size: 24px; font-weight: 700; }
+
+.taxjar-setup .ts-body { padding: 16px 0 28px; flex: 1; }
+.taxjar-setup .ts-foot {
+	display: flex; align-items: center; gap: 10px;
+	padding: 18px 0; border-top: 1px solid var(--border-color);
+}
+.taxjar-setup .ts-grow { flex: 1; }
+/* Looks disabled but stays a real button — clicking it while gated still
+   fires, so _on_next() can explain what's missing instead of the click
+   silently doing nothing (which is what a native `disabled` button does). */
+.taxjar-setup .es-button.ts-next-gated { opacity: 0.45; }
+.taxjar-setup .es-button.ts-next-gated:hover { opacity: 0.45; }
+.taxjar-setup .hide { display: none !important; }
+
+/* step bodies */
+.taxjar-setup .ts-check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+/* The card's border/radius stays on the <li>; the <a> owns the padding so the
+   whole card is the click target, not just the heading text or the icon.
+   `>` matters here — .ts-check-sub's own <li>s (Sales Tax Payable, Shipping
+   and Freight Income) are nested two levels inside a top-level card's <li> too,
+   so a plain descendant selector would wrongly card-ify them as well. */
+.taxjar-setup .ts-check > li {
+	border: 1px solid var(--border-color); border-radius: var(--radius-lg, 12px);
+	font-size: var(--text-sm); color: var(--text-muted);
+	overflow: hidden;
+}
+.taxjar-setup .ts-check-link {
+	display: flex; align-items: flex-start; gap: 10px;
+	padding: 14px 16px; color: inherit; text-decoration: none;
+}
+.taxjar-setup .ts-check-link:hover { background: var(--control-bg); }
+.taxjar-setup .ts-check-num {
+	flex: none; width: 20px; height: 20px; border-radius: 50%;
+	background: var(--control-bg); color: var(--text-color);
+	display: grid; place-items: center;
+	font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.taxjar-setup .ts-check-text { flex: 1; min-width: 0; color: var(--text-color); }
+/* Icon sits right after the heading text, not pushed to the far edge. */
+.taxjar-setup .ts-check-text .icon {
+	margin-left: 6px; color: var(--text-muted); vertical-align: -2px;
+}
+.taxjar-setup .ts-check-sub {
+	list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+}
+.taxjar-setup .ts-check-sub li {
+	font-size: 12.5px; color: var(--text-muted); padding-left: 14px; position: relative;
+}
+.taxjar-setup .ts-check-sub li::before { content: "–"; position: absolute; left: 0; }
+
+.taxjar-setup .ts-card {
+	border: 1px solid var(--border-color); border-radius: var(--radius-lg, 12px);
+	/* No overflow:hidden here — it was clipping Link controls' search dropdown,
+	   which renders as an absolutely-positioned child that can extend past the
+	   card's own box. Rounded corners on the header below handle the visual
+	   trim instead. */
+}
+.taxjar-setup .ts-card-h {
+	display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+	padding: 11px 14px; border-bottom: 1px solid var(--border-color); background: var(--subtle-fg, var(--fg-color));
+	border-radius: var(--radius-lg, 12px) var(--radius-lg, 12px) 0 0;
+}
+.taxjar-setup .ts-card-h b { font-size: var(--text-md); }
+.taxjar-setup .ts-card-h-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.taxjar-setup .ts-card-remove {
+	border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-muted);
+	width: 22px; height: 22px; line-height: 1; border-radius: 50%; cursor: pointer;
+	font-size: 15px; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.taxjar-setup .ts-card-remove:hover { color: var(--text-color); border-color: var(--text-color); }
+/* Disabled while it's the only credential row left (see _sync_remove_buttons) -
+   at least one company/token row must always remain in the wizard. */
+.taxjar-setup .ts-card-remove:disabled { opacity: 0.35; cursor: not-allowed; }
+.taxjar-setup .ts-card-remove:disabled:hover { color: var(--text-muted); border-color: var(--border-color); }
+.taxjar-setup .ts-card-b { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+/* Bootstrap's default .form-group margin-bottom (15px) would otherwise stack
+   on top of the flex gap above, doubling the visual gap between stacked
+   fields (e.g. Company -> Live token) to ~27px for no reason - the gap alone
+   should be the only source of spacing here. */
+.taxjar-setup .ts-card-b .form-group { margin-bottom: 0; }
+
+/* Cards with no header AND no body wrapper (flat content straight inside
+   .ts-card) fall back to plain padding. Excludes cards that do have a
+   .ts-card-b (e.g. Connect's headerless API Mode card) — that div already
+   carries its own 14px padding, and this rule stacking on top of it would
+   double the inset compared to every header-carrying card. */
+.taxjar-setup .ts-card:not(:has(.ts-card-h)):not(:has(.ts-card-b)) { padding: 4px 16px; }
+
+/* Fixed max column width (not 1fr) so a lone card doesn't stretch to fill the
+   whole 880px content width — it stays a sane form-card size regardless of
+   how many cards are in the grid. */
+.taxjar-setup .ts-cardgrid {
+	display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 420px)); gap: 14px;
+	margin-bottom: 14px;
+}
+.taxjar-setup .ts-cardgrid:last-child { margin-bottom: 0; }
+
+/* Nexus cards hold a variable, potentially long list of region pills, so
+   unlike the other card grids they should stretch to fill the row (half the
+   width each, not a fixed max) and simply grow taller as pills wrap. */
+.taxjar-setup .ts-nexusresult { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+.taxjar-setup .ts-kv {
+	display: flex; justify-content: space-between; gap: 12px;
+	padding: 10px 0; font-size: var(--text-sm); border-bottom: 1px solid var(--border-color);
+}
+.taxjar-setup .ts-kv:last-child { border-bottom: 0; }
+/* `>` matters: a plain descendant selector would also match nested content
+   inside the value span (e.g. the second of two stacked indicator-pills,
+   which is a "last-child" of its own wrapper) and bold only that one
+   inconsistently - these two rules must stay scoped to the row's own direct
+   label/value spans. */
+.taxjar-setup .ts-kv > span:first-child { color: var(--text-muted); }
+.taxjar-setup .ts-kv > span:last-child { font-weight: 600; }
+.taxjar-setup .ts-kv > span:last-child.ts-kv-plain { font-weight: 400; }
+/* Features rows are keyed by company, not by a field label, so the emphasis
+   flips: the company reads as the heading (matching .ts-acc-company on the
+   Accounts card beside it) and the feature list as its value. */
+.taxjar-setup .ts-kv-company > span:first-child { color: var(--text-color); font-weight: 600; }
+.taxjar-setup .ts-kv-company > span:last-child { color: var(--text-muted); font-weight: 400; }
+
+/* Review's Accounts card — company name and its account heads stack instead
+   of sitting side by side, so long values never fight the row's alignment. */
+.taxjar-setup .ts-accrow { padding: 10px 0; font-size: var(--text-sm); border-bottom: 1px solid var(--border-color); }
+.taxjar-setup .ts-accrow:last-child { border-bottom: 0; }
+.taxjar-setup .ts-acc-company { font-weight: 600; color: var(--text-color); }
+.taxjar-setup .ts-acc-detail { margin-top: 2px; color: var(--text-muted); }
+
+.taxjar-setup .ts-skeleton { display: flex; flex-direction: column; gap: 12px; padding: 8px 0; }
+
+/* form fields — the control itself is a native Frappe control; these just
+   provide the stacking rhythm around it inside a card or plain flow. */
+.taxjar-setup .ts-field { margin-bottom: 14px; }
+.taxjar-setup .ts-field:last-child { margin-bottom: 0; }
+/* No max-width: .taxjar-setup is already capped at 880px, so a 60ch measure on
+   top of that broke every description onto a second line at roughly half the
+   panel's width while the fields under it ran full width - it read as a layout
+   bug rather than as a reading measure. The page container is the only thing
+   that sets line length now. */
+.taxjar-setup .ts-fieldnote {
+	margin: 0 0 18px; font-size: var(--text-base); color: var(--text-muted);
+}
+/* Section headings reuse Frappe's own .control-label so they read exactly like
+   a field label (e.g. "API Mode") instead of a differently-styled heading. */
+.taxjar-setup label.control-label { display: block; margin: 18px 0 10px; }
+.taxjar-setup label.control-label:first-child { margin-top: 0; }
+
+/* API Mode: label on the left, control on the right - hand-authored (not a
+   native control label) since the segmented toggle below isn't a real frappe
+   control and can't carry frappe's own reqd asterisk. Label only - the
+   "Live requests affect real filings." note that used to sit under it is gone
+   entirely, so this row holds nothing else.
+   flex-direction: row since this sits on .ts-card-b, whose own base rule
+   sets flex-direction: column. */
+.taxjar-setup .ts-mode-row { display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
+.taxjar-setup .ts-reqd { color: var(--text-danger); }
+
+/* API Mode / Enable API logs / Retention read as section-level settings, not
+   ordinary field labels (Company, Live token) - bolded to stand apart from
+   those. Enable API logs has no .control-label of its own (ControlSwitch
+   puts its text in .label-area instead, see check.js), so it's targeted by
+   its container rather than the shared label.control-label rule above.
+
+   Enable API logs is the only one of the three that is a real control, so its
+   label and description are sized and coloured by frappe itself
+   (.switch-control's .label-area / .help-box in common/controls.scss). The
+   other two are hand-authored and were landing a step smaller and greyer
+   right beside it. Restating frappe's values in one shared rule per pair -
+   rather than styling the hand-authored side to match - is what keeps them
+   from drifting apart again: there is no longer a declaration that can move
+   one without the other. */
+.taxjar-setup .ts-mode-row > div > label.control-label,
+.taxjar-setup .ts-retention-row > div > label.control-label,
+.taxjar-setup .ts-field-logging .label-area {
+	font-weight: 600; font-size: var(--text-base); color: var(--ink-gray-7); margin: 0;
+}
+.taxjar-setup .ts-retention-row .ts-fieldnote,
+.taxjar-setup .ts-field-logging .help-box {
+	margin: 2px 0 0; font-size: var(--text-sm); line-height: 1.4;
+	color: var(--ink-gray-5);
+}
+
+/* Enable API logs: one card, two stacked rows divided by a border - top row
+   is fieldtype "Switch" (frappe.ui.form.ControlSwitch), a real pill toggle
+   already shipped and styled in frappe core (common/controls.scss's
+   .switch-control/.switch-visual/.switch-thumb, already part of the desk
+   CSS bundle - no extra import needed, and no custom CSS of our own for the
+   switch itself any more). Bottom row is a plain label+description-on-the-
+   left, input-on-the-right row (same shape as .ts-mode-row above) for
+   Retention. Each row is its own .ts-card-b (own 14px padding on all
+   sides), so the divider naturally gets ~28px of breathing room without any
+   extra gap math - unlike .ts-cred-row's divider, these aren't flex
+   children of a shared gapped container to double-count against.
+   flex-direction: row on .ts-retention-row for the same reason as
+   .ts-mode-row - .ts-card-b's own base rule sets flex-direction: column
+   (the toggle row has only one child, .ts-field-logging, so it doesn't
+   need the override). */
+.taxjar-setup .ts-retention-row {
+	display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 24px;
+	border-top: 1px solid var(--border-color);
+}
+/* ControlSwitch wraps label, description, checkbox and track in one <label>
+   "so clicking the text toggles the switch" (switch.js). Stretched across a
+   full-width card row that turns most of the card into a hit target, including
+   the 2rem gap of empty space in the middle - a stray click while reading
+   silently flips logging. Disabling pointer events on the label and restoring
+   them on the track alone leaves only the switch clickable; the hidden
+   checkbox inside .input-area is sr-only clipped, so it contributes no hit
+   area of its own, and keyboard focus is unaffected either way. Costs text
+   selection on the label and description, which is a fair trade for a control
+   that writes a setting on click. */
+.taxjar-setup .ts-field-logging label.switch-control { pointer-events: none; cursor: default; }
+.taxjar-setup .ts-field-logging .switch-visual { pointer-events: auto; cursor: pointer; }
+
+.taxjar-setup .ts-retention-wrap { display: flex; align-items: center; gap: 6px; }
+.taxjar-setup .ts-retention-wrap .ts-field-retention { width: 60px; }
+.taxjar-setup .ts-retention-unit { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
+
+/* API Credentials: one section, collapsible as a whole (not per-row like the
+   old per-company accordion) - the heading just carries the chevron + label.
+   "+ Add another company" lives inside the card instead, below the rows
+   (.ts-cred-add-row), so it reads as part of the credentials list rather than
+   a header action. */
+/* .ts-card-h's own justify-content: space-between was meant for its old 4-child
+   layout (chevron, label, spacer, "+ Add another company"); with just the
+   chevron + label left now, that rule pushes them to opposite ends instead
+   of keeping them together on the left. */
+.taxjar-setup .ts-cred-heading { cursor: pointer; justify-content: flex-start; }
+.taxjar-setup .ts-acc-chevron { display: inline-flex; color: var(--text-muted); transition: transform 0.15s; }
+.taxjar-setup .ts-acc-chevron-open { transform: rotate(90deg); }
+/* .ts-cred-rows/.ts-cred-add-row's open/closed display is toggled via inline
+   style from JS (see _set_creds_expanded) rather than a class, sidestepping
+   jQuery .toggle()'s inline-display-guessing footgun entirely. Their "open"
+   layout is just .ts-card-b's own base flex-column/padding/gap - no extra
+   rule needed. */
+
+/* Each credential row: Company / Live token / action slot side by side.
+   flex-start (not flex-end) - Company and Live token don't always have the
+   same height (a saved token's row used to be one line taller thanks to a
+   "Leave blank to keep the saved token." description, since removed, but
+   the underlying risk remains: any per-field description throws bottom-
+   alignment off and visibly staggers the two labels). Top-aligning the
+   labels is what stays correct regardless of which field ends up taller;
+   the tail (action slot + remove button) opts out via align-self: flex-end
+   so it lines up with the bottom of the input boxes themselves (Company
+   and Live token now being equal height, their shared bottom edge is a
+   reliable anchor) rather than align-self: center, which centers against
+   the row's full label+input span and visibly floats up near the label line.
+   Divider between rows instead of each row being its own bordered card,
+   since there's no longer a per-row header to divide. Only padding-top (not
+   margin-top) on the divider rule - .ts-cred-rows (.ts-card-b) already
+   contributes its own 12px flex gap between rows, and adding a margin on
+   top of that would double-stack the same way .ts-card-b .form-group's
+   margin fix above avoids doing. */
+.taxjar-setup .ts-cred-row { display: flex; align-items: flex-start; gap: 12px; }
+.taxjar-setup .ts-cred-row + .ts-cred-row { padding-top: 12px; border-top: 1px solid var(--border-color); }
+.taxjar-setup .ts-cred-row .ts-field-company,
+.taxjar-setup .ts-cred-row .ts-field-token { flex: 1; min-width: 0; }
+/* Fixed basis, NOT flex: none - the slot's contents change per state (Connect
+   button / Connecting… / a single check-or-retry icon), and a content-sized
+   slot hands a different width to the two flex: 1 fields in every state. That
+   made Company/Live token columns not line up between rows sitting in
+   different states, and made a row's own inputs resize mid-request on
+   Connect. A reserved column keeps both stable; the width is sized for the
+   widest steady-state content (the idle "Connect" button). */
+/* Action slot and remove button share one bottom-aligned wrapper rather than
+   each carrying align-self: flex-end of their own. Bottom-aligning them
+   separately lined up their bottom EDGES, and they are different heights - the
+   22px circle against a ~28px button - so their centres sat a few px
+   apart and the x read as sagging below it. Centring inside a wrapper
+   whose own bottom is the anchor keeps the slot flush with the inputs while
+   the x tracks whatever the slot currently holds, which matters because that
+   height changes per state (Connect button / Connecting… / a status icon).
+   A margin nudge on the button would have to be re-guessed for each of
+   those, and again for any font or translation change. */
+.taxjar-setup .ts-cred-row .ts-cred-tail {
+	flex: none; display: flex; align-items: center; gap: 12px; align-self: flex-end;
+}
+.taxjar-setup .ts-cred-row .ts-cred-action {
+	flex: 0 0 84px; display: flex; align-items: center; gap: 6px;
+}
+/* Composes two of frappe's own primitives rather than inventing an error
+   style of our own: has-error/has-error-invalid (set via df.invalid +
+   set_invalid(), see _set_token_error) already turns the input's border red
+   (controls.scss); this just carries that same signal onto the description
+   text (.help-box) that set_description() renders below it. */
+.taxjar-setup .frappe-control.has-error .help-box { color: var(--error-color); }
+/* .ts-card-b's default align-items: stretch would otherwise stretch the
+   "Add another company" button to the card's full width, since it's the
+   row's only child. */
+.taxjar-setup .ts-cred-add-row { align-items: flex-start; }
+
+/* toggle rows (Features step) — native Check control + our own label/description */
+.taxjar-setup .ts-togrow {
+	display: flex; align-items: flex-start; gap: 12px;
+	padding: 12px 14px;
+}
+/* Divider between rows only, never above the first or below the last - same
+   adjacent-sibling shape as .ts-cred-row's. No padding-top here: unlike
+   .ts-cred-row, .ts-togrow already carries its own. */
+.taxjar-setup .ts-togrow + .ts-togrow { border-top: 1px solid var(--border-color); }
+.taxjar-setup .ts-togtext b { font-size: var(--text-md); }
+.taxjar-setup .ts-togtext p { margin: 2px 0 0; font-size: var(--text-base); color: var(--text-muted); }
+/* gap: 0 - .ts-togrow brings its own 12px padding on both sides, so the
+   divider between rows gets 12px above and 12px below. A grid gap here
+   would stack on top of the upper row's padding only (the border sits at
+   the start of the lower row's box), pushing the line off-centre. */
+.taxjar-setup .ts-cotog { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0; }
+
+/* nexus - the banner is frappe.ui.alert and the fetch control frappe.ui.button
+   / frappe.ui.badge, all styled by their own already-loaded component CSS;
+   only the layout around them lives here. */
+.taxjar-setup .ts-nexusnote-mount { margin-bottom: 18px; }
+.taxjar-setup .ts-nexusaction { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.taxjar-setup .ts-nexustitle { margin: 0 auto 0 0; font-size: 24px; font-weight: 700; line-height: 1; }
+.taxjar-setup .ts-lastsync {
+	font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap;
+}
+/* The icon-only fetch button has no loading_label span, so the framework's
+   own aria-busy rule (which only hides the icon alongside that span) never
+   fires here - hide it ourselves or the icon and spinner show together. */
+.taxjar-setup .ts-fetch-mount .es-button[aria-busy="true"] > svg { display: none; }
+.taxjar-setup .ts-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.taxjar-setup .ts-pill {
+	font-size: 12.5px; border: 1px solid var(--border-color); border-radius: 100px;
+	padding: 4px 11px; display: inline-flex; gap: 7px;
+}
+.taxjar-setup .ts-pillcode { font-family: var(--font-family-monospace, monospace); color: var(--text-muted); }

@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -12,6 +11,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    name: Static Analysis
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install semgrep
+        run: pip install semgrep
+
+      # frappe/semgrep-rules carries the framework-specific rules this app is
+      # held to: enqueue-without-after-commit, raw frappe.db.sql, explicit
+      # commits, single-value type safety. Blocking, and currently at zero -
+      # the two suppressions in the tree are inline `# nosemgrep` pragmas with
+      # a stated reason, so they show up in review rather than disappearing
+      # into a config file.
+      #
+      # Deliberately not also running the registry's generic `r/python`: it
+      # reports ~77 style findings, almost all `unspecified-open-encoding` in
+      # the test file, which would have to stay non-blocking and would bury
+      # the rules that matter.
+      - name: Clone frappe semgrep rules
+        run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git /tmp/frappe-semgrep-rules
+
+      - name: Run semgrep
+        run: |
+          semgrep --config /tmp/frappe-semgrep-rules/rules \
+                  --exclude '*/node_modules/*' \
+                  --exclude '*/dist/*' \
+                  --metrics off \
+                  --error \
+                  taxjar_integration
+
   tests:
     runs-on: ubuntu-latest
     strategy:
@@ -29,33 +67,33 @@ jobs:
 
     steps:
       - name: Clone
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: 14
+          node-version: 20
           check-latest: true
 
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.cfg') }}
           restore-keys: |
             ${{ runner.os }}-pip-
             ${{ runner.os }}-
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: 'echo "::set-output name=dir::$(yarn cache dir)"'
+        run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}

@@ -1,0 +1,290 @@
+// Shared desk styles for the TaxJar pages (Transaction Sync, Customer
+// Configuration). Loaded on every desk page via app_include_css in hooks.py.
+//
+// Everything here styles the components in public/js/components. Page-specific
+// rules stay in the page's own css file.
+
+// ── Data table ────────────────────────────────────────────────────────────
+// frappe.DataTable ships its own layout; these only fix the two things that
+// look wrong inside a full-width desk page.
+
+.taxjar-datatable {
+	--dt-row-height: 34px;
+
+	width: 100%;
+	// Breathing room on all four sides - the table sitting flush against the
+	// tab row above and the paginator below read as one undifferentiated block.
+	padding: 12px 15px 15px;
+
+	.datatable {
+		width: 100%;
+
+		// The table paginates instead of scrolling inside itself, but the height
+		// is NOT dropped here. Rows are drawn by HyperList, which takes this
+		// element's computed height as its viewport - an auto height computes
+		// to 0px and the table renders empty. DataTableManager.fit_height()
+		// sets an exact pixel height from the row count instead, which leaves
+		// nothing to scroll while still giving HyperList a real number.
+		.dt-scrollable {
+			overflow-y: hidden;
+			// The fluid layout writes overflowX: hidden straight onto this
+			// element (style.js:368-372), which would trap the columns with no
+			// way to reach them on a narrow window. An inline style only loses
+			// to !important, hence this.
+			overflow-x: auto !important;
+			// setBodyStyle() pins this to the row's own width + 10px whenever the
+			// row is narrower than the container (style.js:322-331), while the
+			// header spans the container. Under the fluid layout the row is
+			// always a few pixels short - distributeRemainingWidth() takes 2px
+			// off every column - so the header ends up visibly wider than the
+			// body beneath it. Also an inline style, so also !important.
+			width: 100% !important;
+		}
+
+		// Only header cells close themselves off on the right
+		// (.dt-cell--header:last-child in the library's stylesheet), so without
+		// this the header row is literally 1px wider than every body row.
+		.dt-row .dt-cell:last-child {
+			border-right: 1px solid var(--dt-border-color);
+		}
+
+		// let a row grow to fit wrapped content, but pin the filter row so it
+		// cannot stretch with it
+		.dt-row {
+			height: unset;
+		}
+
+		.dt-row-filter {
+			height: var(--dt-row-height);
+
+			.dt-cell {
+				max-height: var(--dt-row-height);
+			}
+		}
+	}
+}
+
+// ── Summary strip ─────────────────────────────────────────────────────────
+
+.taxjar-summary-strip {
+	display: flex;
+	align-items: stretch;
+	border-bottom: 1px solid var(--border-color);
+	// The whole strip is one row. frappe's .report-summary is built for a
+	// handful of wide cards and gives each a 160px minimum plus 20px margins -
+	// six of those need well over 1200px and wrap onto a second line long
+	// before that. These are small counts, so they are sized to their content
+	// instead (see .summary-item below).
+	flex-wrap: nowrap;
+	overflow-x: auto;
+
+	.taxjar-summary-group {
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-start;
+		padding: 16px 0 20px;
+	}
+
+	// flex-grow is set per group in summary_strip.js, weighted by how many
+	// numbers the group holds - a shared value here would hand a one-card group
+	// the same slice as a five-card one.
+	.taxjar-summary-group {
+		flex: 0 1 auto;
+	}
+
+	// the divider between groups - same 1px weight as the rules inside a group,
+	// since the heading above each one already marks the boundary
+	.taxjar-summary-group + .taxjar-summary-group {
+		border-left: 1px solid var(--border-color);
+	}
+
+	// The group heading has to read as a heading, not as another card label -
+	// they sit two lines apart and would otherwise look like the same rank.
+	.taxjar-summary-group-label {
+		text-align: center;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		// A rule across the group, so the heading reads as a header over the
+		// counts rather than as another line of text stacked above them.
+		border-bottom: 1px solid var(--border-color);
+		padding-bottom: 8px;
+		margin-bottom: 12px;
+	}
+
+	// Separates a total from the statuses it breaks down into. Lighter than the
+	// rule between groups, which is a stronger boundary.
+	.taxjar-summary-divider {
+		width: 1px;
+		align-self: stretch;
+		margin: 0 4px;
+		background: var(--border-color);
+	}
+
+	// = and + between the counts. Quieter than the numbers themselves - it is
+	// punctuation, not data - and narrow so the operators do not take the room
+	// the figures need.
+	//
+	// The divider sits on the operator's leading edge rather than between every
+	// pair of elements, so each segment reads as one thing - "= Synced",
+	// "+ Queued" - instead of boxing the operators off in cells of their own.
+	.taxjar-summary-operator {
+		padding: 0 14px;
+		flex: 0 0 auto;
+		border-left: 1px solid var(--border-color);
+
+		.summary-value {
+			color: var(--text-light, var(--text-muted));
+			font-weight: 400;
+		}
+	}
+
+	// frappe's .report-summary is built for a handful of wide cards: it wraps,
+	// and gives each item a 160px minimum plus 20px margins either side. Five
+	// counts then demand over 1000px and "Excluded" drops to a second line.
+	// These are short numbers, so they are sized to their content and the group
+	// stays on one row.
+	.report-summary {
+		border-bottom: 0;
+		margin: 0;
+		padding: 0;
+		gap: 0;
+		flex-wrap: nowrap;
+		justify-content: space-around;
+	}
+
+	// Equal-width cells. Left content-sized with space-around, the gaps fall
+	// wherever the text happens to end, so the dividers and the figures drift
+	// out of line - the first card's number sat well left of its own cell.
+	.summary-item {
+		flex: 1 1 0;
+		min-width: 0;
+		max-width: none;
+		margin: 0;
+		padding: 0 14px;
+	}
+
+	// Keeps neighbouring counts visibly separate. Only between two adjacent
+	// cards - a card following a .taxjar-summary-divider already has one.
+	.summary-item + .summary-item {
+		border-left: 1px solid var(--border-color);
+	}
+
+	// frappe centres the label but not the value, so the number would sit left
+	// of the word above it.
+	.summary-value {
+		text-align: center;
+	}
+}
+
+// The whole card is the click target; the pointer cursor is the only thing
+// advertising it. No underline and no background - the row is a dense line of
+// figures, and decorating each one competes with the numbers themselves.
+.taxjar-summary-clickable {
+	cursor: pointer;
+
+	&:focus-visible {
+		outline: 1px solid var(--primary);
+		outline-offset: -2px;
+	}
+
+	// The drilled-down card stays bold, so it is still visible why the table
+	// below is showing a subset.
+	&[aria-pressed="true"] .summary-value {
+		font-weight: 800;
+	}
+}
+
+// ── Bulk action button ────────────────────────────────────────────────────
+// Disabled look without pointer-events: none - the title has to survive, and
+// so does tab focus. See bulk_action_button.js.
+
+.es-button.taxjar-bulk-action[data-disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+// ── Customer page: Configure column ──────────────────────────────────────
+// The region count prefixes the pencil icon and only shows once a row has
+// configured regions - without a reserved width, the icon visibly shifts
+// left/right as the count goes from blank to 1 digit to 2 digits. 2ch fits
+// a two-digit count (this app caps regions well under 100 per customer);
+// right-aligned so the icon itself always sits flush against it.
+.taxjar-region-count {
+	display: inline-block;
+	min-width: 2ch;
+	text-align: right;
+}
+
+// ── Tab row ───────────────────────────────────────────────────────────────
+// frappe.ui.tabs draws the tab bar itself (.es-tabs__list, already styled by
+// its own component CSS); only the left inset - lining the labels up with
+// the table's own padding below them - and the tab actions row need
+// anything here.
+
+.taxjar-page-tabs {
+	.es-tabs__list {
+		padding-left: 15px;
+	}
+
+	// Sits inside the table wrapper, directly above the rows it acts on, so it
+	// picks up that wrapper's padding rather than needing its own.
+	.taxjar-tab-actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 12px;
+		margin-bottom: 10px;
+	}
+
+	.taxjar-selection-count {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+}
+
+// ── Paginator ─────────────────────────────────────────────────────────────
+
+.taxjar-paginator {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	// Horizontal inset comes from the .taxjar-datatable wrapper this now sits
+	// inside (both pages share it) - repeating it here would double it and
+	// push the controls off the table's right edge. Only the gap below the
+	// rows is set here.
+	padding: 14px 0 0;
+
+	.taxjar-paginator-size select {
+		width: 72px;
+	}
+
+	// Where you are, stacked above the means of moving.
+	.taxjar-paginator-nav {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 6px;
+		margin-left: auto;
+	}
+
+	.taxjar-paginator-status {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+
+	.taxjar-paginator-pages {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.taxjar-paginator-gap {
+		padding: 0 2px;
+		color: var(--text-muted);
+	}
+}

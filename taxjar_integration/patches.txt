@@ -1,0 +1,9 @@
+[pre_model_sync]
+
+[post_model_sync]
+taxjar_integration.patches.remove_old_taxjar_workspace
+taxjar_integration.patches.remove_old_taxjar_integration_workspace
+taxjar_integration.patches.remove_old_taxjar_integration_module
+taxjar_integration.patches.rename_not_applicable_sync_status
+taxjar_integration.patches.remove_taxjar_response_section
+taxjar_integration.patches.remove_item_breakdown_fields

@@ -1,1 +1,1 @@
-Taxjar Integration
+TaxJar Integration

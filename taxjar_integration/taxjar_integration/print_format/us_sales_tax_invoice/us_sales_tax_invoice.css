@@ -1,0 +1,331 @@
+/*
+	Palette/typography/table treatment lifted from erpnext's own "Sales
+	Invoice with Item Image" print format (accounts/print_format/
+	sales_invoice_with_item_image) - same rounded highlight-bg tables, same
+	#171717 / #7c7c7c ink, so this sits next to core formats without looking
+	like a different product. Everything TaxJar-specific (status panel, tax
+	tag, breakdown section) is new, styled to match.
+*/
+
+.invoice-page {
+	font-family: Inter, sans-serif;
+	color: #171717;
+}
+
+.print-format-body {
+	padding: 30px 12px 12px 12px !important;
+}
+
+.letter-head {
+	padding-top: 12px !important;
+	padding-bottom: 12px !important;
+}
+
+.letter-head-footer {
+	margin-top: 0px !important;
+}
+
+.title {
+	color: #7c7c7c !important;
+}
+
+.text-muted {
+	color: #7c7c7c !important;
+}
+
+.text-dark {
+	color: #171717 !important;
+}
+
+.small-text {
+	font-size: 11px;
+	color: #7c7c7c;
+}
+
+.text-left {
+	text-align: left;
+}
+
+.text-center {
+	text-align: center;
+}
+
+.text-right {
+	text-align: right;
+}
+
+.text-bold {
+	font-weight: 700;
+}
+
+.mt-15 {
+	margin-top: 15px;
+}
+
+.taxjar-doc-title {
+	margin-top: 12px;
+}
+
+.taxjar-doc-title h2 {
+	font-size: 20px;
+	font-weight: 700;
+	color: #171717;
+	margin: 0;
+	letter-spacing: 0.02em;
+}
+
+.mt-20 {
+	margin-top: 20px;
+}
+
+.mw-400 {
+	max-width: 400px;
+}
+
+.info-table {
+	width: 100%;
+}
+
+.info-table td {
+	vertical-align: top;
+	padding: 0 !important;
+}
+
+.info-text {
+	margin-bottom: 4px;
+	font-size: 12px;
+}
+
+.items-table,
+.tax-table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.items-table td,
+.tax-table td {
+	border-bottom: 1px solid #ededed;
+	padding: 8px;
+	font-size: 12px;
+}
+
+.items-table thead td,
+.tax-table thead td {
+	color: #7c7c7c !important;
+	height: 32px;
+}
+
+.items-table thead tr:first-of-type td,
+.tax-table thead tr:first-of-type td {
+	border-bottom: none;
+}
+
+.items-table thead tr:first-child td:first-child,
+.tax-table thead tr:first-child td:first-child {
+	border-top-left-radius: 10px;
+	border-bottom-left-radius: 10px;
+}
+
+.items-table thead tr:first-child td:last-child,
+.tax-table thead tr:first-child td:last-child {
+	border-top-right-radius: 10px;
+	border-bottom-right-radius: 10px;
+}
+
+.highlight-bg {
+	background: #f8f8f8;
+}
+
+.row-divider {
+	border-bottom: 1px solid #e9e9e9;
+}
+
+.taxjar-grand-total td {
+	border-top: 1px solid #171717;
+	border-bottom: none;
+	padding-top: 8px !important;
+	font-size: 13px;
+}
+
+.in-words {
+	color: #171717 !important;
+	max-width: 500px;
+	word-wrap: break-word;
+	line-height: 1.5;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.taxjar-in-words-box {
+	margin-top: 20px;
+	padding-top: 14px;
+	border-top: 1px solid #ededed;
+}
+
+.taxjar-in-words-label {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #7c7c7c;
+	margin-bottom: 3px;
+}
+
+.info-card {
+	margin-top: 40px;
+	color: #7c7c7c;
+}
+
+/*
+	Left column shared by Tax Analysis and the status panel below it - a
+	single float/width here (rather than floating each block separately)
+	guarantees they stack vertically instead of trying to sit side by side.
+*/
+.taxjar-left-column {
+	float: left;
+	width: 48%;
+	margin-top: 15px;
+}
+
+/*
+	Mirrors .taxjar-left-column's width - an unconstrained float:right (its
+	own width driven purely by content) risked the row overflowing the page
+	next to a 48%-wide left column with no shared budget between them.
+	Explicit 48%/48% with a small gutter keeps both sides predictable at any
+	render width.
+*/
+.taxjar-totals-column {
+	float: right;
+	width: 48%;
+	margin-top: 15px;
+	margin-bottom: 5px;
+}
+
+/*
+	Wraps Tax Analysis's table + the status panel below it into one visual
+	card when both are showing - overflow:hidden here is what rounds the
+	panel's bottom corners (and the table's top corners, via its header),
+	not radius rules on the children themselves.
+*/
+.taxjar-analysis-card {
+	border: 1px solid #ededed;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+/* TaxJar sales tax status panel */
+.taxjar-status-panel {
+	border-radius: 10px;
+	background: #f8f8f8;
+	padding: 6px 16px 12px 16px;
+	margin-top: 12px;
+	font-size: 12px;
+}
+
+/* Joined onto the table above it - no gap, no rounding of its own (the card wrapper handles that), just a thin divider where the table ends. */
+.taxjar-status-panel-attached {
+	margin-top: 0;
+	border-radius: 0;
+	border-top: 1px solid #ededed;
+}
+
+.taxjar-status-panel .taxjar-status-line {
+	font-size: 13px;
+	color: #7c7c7c;
+}
+
+.taxjar-status-panel .taxjar-status-line + div {
+	margin-top: 4px;
+}
+
+/* Per-line-item taxability note, under the item name */
+.taxjar-tax-tag {
+	display: block;
+	font-size: 10px;
+	color: #7c7c7c;
+	margin-top: 2px;
+}
+
+.taxjar-line-note {
+	display: block;
+	font-size: 10px;
+	color: #7c7c7c;
+}
+
+.taxjar-breakdown-section {
+	margin-top: 0;
+}
+
+.taxjar-breakdown-section h4 {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #7c7c7c;
+	margin: 0 0 4px 0;
+}
+
+/*
+	doc.taxjar_breakdown_html comes pre-rendered from the shared
+	templates/includes/taxjar_breakup.html macro (also used on the desk form
+	itself), as a plain Bootstrap .table.table-bordered.table-hover -
+	restyled here, scoped under .taxjar-analysis-card (the table's actual
+	parent - the heading above it lives in a separate .taxjar-breakdown-section
+	sibling, so a selector scoped to THAT div doesn't reach the table at
+	all), rather than editing the shared include itself (which would also
+	change how the breakdown renders on the desk form).
+
+	The table carries no border/radius/overflow of its own here - the card
+	wrapper (.taxjar-analysis-card) already provides all three for the
+	table + the status panel below it as one shape, so giving the table a
+	second, redundant frame would double up on it.
+*/
+.taxjar-analysis-card table {
+	/*
+		Frappe's own base print stylesheet (templates/styles/standard.css)
+		gives any element with class "table" (which the breakdown table
+		carries - table.table.table-bordered.table-hover, from the shared
+		taxjar_breakup.html include) a 20px top+bottom margin. That's what
+		was actually behind the big gaps above and below this table -
+		margin: 0 overrides it explicitly rather than leaving it to bite
+		again the next time this table's wrapper/selector changes.
+	*/
+	margin: 0;
+	width: 100%;
+	border: none;
+	border-radius: 0;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+.taxjar-analysis-card table th,
+.taxjar-analysis-card table td {
+	border: none;
+	border-right: 1px solid #ededed;
+	border-bottom: 1px solid #ededed;
+	padding: 8px;
+	font-size: 12px;
+}
+
+.taxjar-analysis-card table th:last-child,
+.taxjar-analysis-card table td:last-child {
+	border-right: none;
+}
+
+.taxjar-analysis-card table tbody tr:last-child td,
+.taxjar-analysis-card table tfoot td {
+	border-bottom: none;
+}
+
+.taxjar-analysis-card table thead th {
+	background: #f8f8f8;
+	color: #7c7c7c !important;
+	font-weight: 600;
+}
+
+.taxjar-analysis-card table tfoot td {
+	border-top: 1px solid #171717;
+}

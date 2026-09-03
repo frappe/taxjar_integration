@@ -1,0 +1,61 @@
+{#
+	Trims trailing zeros from the fractional part only (never the integer
+	part - a naive rstrip("0") on the whole "10.000" string would wrongly
+	collapse it to "1"), so a round rate reads as "6%" and an odd one still
+	shows what it needs to ("6.25%").
+#}
+{% macro fmt_rate(rate) %}
+	{%- set s = "%.3f"|format((rate or 0) * 100) -%}
+	{%- set whole, frac = s.split(".") -%}
+	{%- set frac = frac.rstrip("0") -%}
+	{{- whole if not frac else whole ~ "." ~ frac -}}
+{% endmacro %}
+
+{% macro tax_breakup_table(rows, totals, table_currency) %}
+<div class="tax-break-up" style="overflow-x: auto;">
+	<table class="table table-bordered table-hover">
+		<thead>
+			<tr>
+				<th class="text-left">{{ _("Jurisdiction") }}</th>
+				<th class="text-left">{{ _("Name") }}</th>
+				<th class="text-right">{{ _("Rate") }}</th>
+				<th class="text-right">{{ _("Tax") }}</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in rows %}
+			<tr>
+				<td><strong>{{ row.jurisdiction | e }}</strong></td>
+				<td>{{ (row.name or "") | e }}</td>
+				<td class="text-right">{{ fmt_rate(row.rate) }}%</td>
+				<td class="text-right" style="white-space: nowrap;">{{ frappe.utils.fmt_money(row.tax_amount, None, table_currency) }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+		<tfoot>
+			<tr style="font-weight:bold">
+				<td colspan="2" class="text-right">{{ _("Total") }}</td>
+				<td class="text-right">{{ fmt_rate(totals.rate) }}%</td>
+				<td class="text-right" style="white-space: nowrap;">{{ frappe.utils.fmt_money(totals.amount_to_collect or 0, None, table_currency) }}</td>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+{% endmacro %}
+
+{% if not data %}
+{% if no_nexus_reason %}
+<p class="text-muted">{{ _("{0}, hence no taxes are charged.").format(no_nexus_reason) }}</p>
+{% else %}
+<p class="text-muted">{{ _("No TaxJar tax breakdown available for this transaction.") }}</p>
+{% endif %}
+{% else %}
+	{% if data.usd %}
+	<p class="text-muted small">{{ _("This is a multi-currency transaction. Amounts were converted from {0} to USD at a rate of {1} ({2}) for TaxJar tax calculation.").format(data.currency, data.exchange_rate, data.exchange_date) }}</p>
+	<p class="text-muted small" style="margin-bottom:4px"><strong>{{ _("Tax Calculation (USD)") }}</strong></p>
+	{{ tax_breakup_table(data.usd.transaction, data.usd.totals, "USD") }}
+	<p class="text-muted small" style="margin-top:12px;margin-bottom:4px"><strong>{{ _("Equivalent in Transaction Currency ({0})").format(currency) }}</strong></p>
+	{% endif %}
+
+	{{ tax_breakup_table(data.transaction, data.totals, currency) }}
+{% endif %}
