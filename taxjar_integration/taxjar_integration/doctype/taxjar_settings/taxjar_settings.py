@@ -90,6 +90,10 @@ class TaxJarSettings(Document):
 		api_mode: DF.Literal["", "Live", "Sandbox"]
 		company_config: DF.Table[TaxJarCompanyConfig]
 		enable_taxjar_logging: DF.Check
+		legacy_check_last_run: DF.Datetime | None
+		legacy_check_status: DF.Literal["Pending", "Running", "Done", "Failed"]
+		legacy_check_summary: DF.LongText | None
+		legacy_cutoff_date: DF.Date | None
 		log_retention_days: DF.Int
 		nexus: DF.Table[TaxJarNexus]
 		nexus_last_synced: DF.Datetime | None
@@ -998,6 +1002,23 @@ def get_custom_fields():
 				label="TaxJar Retry Count",
 				default="0",
 				search_index=1,
+				read_only=1,
+				hidden=1,
+				no_copy=1,
+				allow_on_submit=1,
+			),
+			dict(
+				# The TaxJar provider this transaction is filed under, when it is
+				# not ours. TaxJar keys a transaction on provider and id together,
+				# so a show or delete that names the wrong provider answers 404.
+				# Version 15 sent no provider, and TaxJar filed its orders under
+				# "api". legacy_check.py writes "api" on every pre-upgrade invoice
+				# that TaxJar holds. Blank means TAXJAR_PROVIDER - see
+				# provider_params().
+				fieldname="taxjar_provider",
+				fieldtype="Data",
+				insert_after="taxjar_sync_retry_count",
+				label="TaxJar Provider",
 				read_only=1,
 				hidden=1,
 				no_copy=1,

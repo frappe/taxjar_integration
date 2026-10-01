@@ -79,6 +79,11 @@ function _add_taxjar_buttons(frm) {
 	// than a button on the invoice.
 	if (frm.doc.taxjar_exclusion_reason === "Export Transaction") return;
 
+	// TaxJar version 15 may have sent this invoice already, under another
+	// provider. Sending it again would file it twice. The pre-upgrade invoice
+	// check answers first, and the button returns once it has said "not found".
+	if (frm.doc.taxjar_exclusion_reason === "Submitted before upgrade, not yet checked") return;
+
 	// resync_transaction refuses to file for a company whose "create
 	// transactions" flag is off, so the button is not offered there either -
 	// it would otherwise sit directly beneath a sidebar pill saying this company

@@ -28,7 +28,21 @@
   "product_tax_categories_last_synced",
   "product_tax_category_html",
   "section_nexus_raw",
-  "nexus"
+  "nexus",
+  "legacy_tab",
+  "section_legacy_check",
+  "legacy_intro_html",
+  "legacy_check_status_html",
+  "column_break_legacy_dates",
+  "legacy_cutoff_date",
+  "legacy_check_last_run",
+  "section_legacy_run",
+  "run_legacy_check_btn",
+  "section_legacy_companies",
+  "legacy_check_html",
+  "section_legacy_raw",
+  "legacy_check_status",
+  "legacy_check_summary"
  ],
  "fields": [
   {
@@ -169,11 +183,89 @@
    "depends_on": "eval: doc.taxjar_enabled == 1",
    "fieldname": "section_break_mhnl",
    "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "eval: doc.legacy_cutoff_date",
+   "fieldname": "legacy_tab",
+   "fieldtype": "Tab Break",
+   "label": "Pre-Upgrade Invoices"
+  },
+  {
+   "fieldname": "section_legacy_check",
+   "fieldtype": "Section Break",
+   "label": "Invoice Check"
+  },
+  {
+   "fieldname": "legacy_intro_html",
+   "fieldtype": "HTML",
+   "label": "About the Check"
+  },
+  {
+   "fieldname": "legacy_check_status_html",
+   "fieldtype": "HTML",
+   "label": "Status"
+  },
+  {
+   "fieldname": "column_break_legacy_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "legacy_cutoff_date",
+   "fieldtype": "Date",
+   "label": "Upgrade Date",
+   "read_only": 1,
+   "description": "The date this site moved from TaxJar version 15 to this version."
+  },
+  {
+   "fieldname": "legacy_check_last_run",
+   "fieldtype": "Datetime",
+   "label": "Last Run",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_legacy_run",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "run_legacy_check_btn",
+   "fieldtype": "Button",
+   "label": "Run Check"
+  },
+  {
+   "fieldname": "section_legacy_companies",
+   "fieldtype": "Section Break",
+   "label": "Companies"
+  },
+  {
+   "fieldname": "legacy_check_html",
+   "fieldtype": "HTML",
+   "label": "Companies"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_legacy_raw",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "Raw Data"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "legacy_check_status",
+   "fieldtype": "Select",
+   "label": "Check Status",
+   "options": "Pending\nRunning\nDone\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "legacy_check_summary",
+   "fieldtype": "Long Text",
+   "label": "Check Summary",
+   "read_only": 1
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-10-09 00:00:00.000000",
+ "modified": "2026-10-12 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "TaxJar Integration",
  "name": "TaxJar Settings",

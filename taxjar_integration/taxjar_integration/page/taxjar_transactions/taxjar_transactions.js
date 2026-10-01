@@ -104,7 +104,23 @@ class TaxJarTransactionSync {
 		// off() first so a stray double-show can't stack the same handler.
 		frappe.realtime.off(SYNC_UPDATE_EVENT, this._on_sync_update);
 		frappe.realtime.on(SYNC_UPDATE_EVENT, this._on_sync_update);
+		this.apply_route_options();
 		this.refresh();
+	}
+
+	// A link from another screen can open the page on a company, a date range
+	// and a tab. The Pre-Upgrade Invoices tab on TaxJar Settings does this:
+	// its invoices are older than the one-month default range. Read once, then
+	// cleared, so a later visit opens on the page's own defaults.
+	apply_route_options() {
+		const options = frappe.route_options;
+		if (!options) return;
+		frappe.route_options = null;
+
+		if (options.company) this.filter_company.set_input(options.company);
+		if (options.from_date) this.filter_from_date.set_input(options.from_date);
+		if (options.to_date) this.filter_to_date.set_input(options.to_date);
+		if (TABS.some((tab) => tab.name === options.tab)) this.go_to_tab(options.tab);
 	}
 
 	// Detaches our handler but deliberately does NOT doctype_unsubscribe: the

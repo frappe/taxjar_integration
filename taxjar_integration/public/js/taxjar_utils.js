@@ -2785,6 +2785,16 @@ taxjar_integration.exclusion_reason_text = function (reason, is_current) {
 		return __("Export transactions sync is disabled.");
 	}
 
+	// Both written by the pre-upgrade invoice check (legacy_check.py), on
+	// invoices that TaxJar version 15 may have sent without a record.
+	if (reason === "Submitted before upgrade, not yet checked") {
+		return __("This invoice was submitted before the upgrade from TaxJar version 15. The check of whether TaxJar holds it has not run yet.");
+	}
+
+	if (reason === "Not found in TaxJar, submitted before upgrade") {
+		return __("This invoice was submitted before the upgrade from TaxJar version 15. TaxJar does not hold it.");
+	}
+
 	return "";
 };
 
@@ -2800,6 +2810,10 @@ taxjar_integration.exclusion_reason_action = function (reason) {
 		// Features is the step that owns Include Export Transactions, the same
 		// card the other remedial links open.
 		return { label: __("Configure"), href: TAXJAR_SETUP_FEATURES_URL };
+	}
+
+	if (reason === "Submitted before upgrade, not yet checked") {
+		return { label: __("Run the check"), href: "/app/taxjar-settings#legacy_tab" };
 	}
 
 	return null;

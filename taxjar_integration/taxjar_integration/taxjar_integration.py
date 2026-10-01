@@ -85,7 +85,20 @@ TAXJAR_ROW_DESCRIPTION = "Sales Tax"
 # Provider identifier sent to TaxJar so transactions/refunds created via ERPNext
 # are addressable (show/delete) under the ERPNext provider namespace.
 TAXJAR_PROVIDER = "ERPNext"
-PROVIDER_PARAMS = {"provider": TAXJAR_PROVIDER}
+
+# The provider TaxJar files a transaction under when the request names none.
+# Version 15 named none, so every order it sent is filed under this one.
+LEGACY_PROVIDER = "api"
+
+
+def provider_params(doc):
+	"""The provider to show or delete this invoice's transaction under.
+
+	Ours, unless the invoice records another. A pre-upgrade invoice that TaxJar
+	holds records LEGACY_PROVIDER (see legacy_check.py). Asked with our provider,
+	TaxJar answers 404 for it, and the delete path reads a 404 as "already gone".
+	"""
+	return {"provider": doc.get("taxjar_provider") or TAXJAR_PROVIDER}
 
 
 def _get_taxjar_logger():
@@ -428,6 +441,14 @@ EXCLUSION_OUTSIDE_COVERAGE = "Export Transaction"
 # the form paints the same words before the first save.
 EXPORT_NO_TAX_REASON = "Sales taxes are not applicable on export transactions."
 
+# Invoices submitted while the site ran TaxJar version 15. That version sent
+# some of them to TaxJar and recorded nothing about it, so the upgrade cannot
+# know which. The mark_pre_upgrade_invoices patch writes the first reason on
+# every one, and legacy_check.py replaces it with Synced or with the second
+# reason once TaxJar has answered.
+EXCLUSION_LEGACY_UNCHECKED = "Submitted before upgrade, not yet checked"
+EXCLUSION_LEGACY_NOT_FOUND = "Not found in TaxJar, submitted before upgrade"
+
 # Drives the Select's options - see make_custom_fields, which re-runs on every
 # migrate, so the field and this list cannot drift apart.
 TRANSACTION_EXCLUSION_REASONS = (
@@ -435,6 +456,8 @@ TRANSACTION_EXCLUSION_REASONS = (
 	EXCLUSION_SYNC_NOT_ENABLED,
 	EXCLUSION_REMOVED_FROM_TAXJAR,
 	EXCLUSION_OUTSIDE_COVERAGE,
+	EXCLUSION_LEGACY_UNCHECKED,
+	EXCLUSION_LEGACY_NOT_FOUND,
 )
 
 # What the region code reads when nobody knows it. TaxJar accepts any non-blank
@@ -807,14 +830,14 @@ def delete_transaction_from_taxjar(invoice_name):
 	is_refund = doc.is_return
 	action = "delete_refund" if is_refund else "delete_order"
 	payload = {"transaction_id": doc.name}
-	provider_params = PROVIDER_PARAMS
+	provider = provider_params(doc)
 
 	try:
 		log_taxjar_call(action=action, status="request", payload=payload, context=ctx)
 		if is_refund:
-			response = client.delete_refund(doc.name, params=provider_params)
+			response = client.delete_refund(doc.name, params=provider)
 		else:
-			response = client.delete_order(doc.name, params=provider_params)
+			response = client.delete_order(doc.name, params=provider)
 		log_taxjar_call(action=action, status="success", payload=payload, response=response, context=ctx)
 		_set_sync_status(invoice_name, "Synced")
 	except taxjar.exceptions.TaxJarResponseError as err:

@@ -106,6 +106,252 @@ frappe.ui.form.on('TaxJar Company Config', {
 	},
 });
 
+// ── Pre-Upgrade Invoices tab ────────────────────────────────────────────
+// Shown only on a site that ran TaxJar version 15 (legacy_cutoff_date is set by
+// the mark_pre_upgrade_invoices patch). The check itself is legacy_check.py.
+// Built from the desk's own components - alert, badge, progress, button and
+// empty state - so the tab looks like every other TaxJar screen.
+
+const LEGACY_CHECK = 'taxjar_integration.taxjar_integration.legacy_check';
+const LEGACY_PROGRESS_EVENT = 'taxjar_legacy_check_progress';
+const LEGACY_STATUS_THEMES = { Pending: 'gray', Running: 'blue', Done: 'green', Failed: 'red' };
+
+function _refresh_legacy_tab(frm) {
+	if (!frm.doc.legacy_cutoff_date || !frm.fields_dict.legacy_check_html) return;
+
+	// Only the newest answer is drawn. A reload while a call is in flight
+	// would otherwise let the older answer land last.
+	const request = (frm._legacy_request = (frm._legacy_request || 0) + 1);
+	frappe.call({ method: `${LEGACY_CHECK}.get_legacy_check_state` }).then((r) => {
+		if (request !== frm._legacy_request || !r.message) return;
+		_render_legacy_tab(frm, r.message);
+	});
+}
+
+function _render_legacy_tab(frm, state) {
+	frm._legacy_progress = {};
+
+	frm.fields_dict.legacy_intro_html.$wrapper.html(frappe.ui.alert.html({
+		title: __('Version 15 did not record which invoices it sent to TaxJar.'),
+		description: __('This check asks TaxJar for its orders and refunds, and marks each old invoice as found or not found.'),
+	}));
+
+	const $companies = frm.fields_dict.legacy_check_html.$wrapper.empty();
+
+	if (!state.companies.length) {
+		frm.fields_dict.legacy_check_status_html.$wrapper.empty();
+		frm.toggle_display('run_legacy_check_btn', false);
+		$companies.append(frappe.ui.empty_state({
+			icon: 'file-check',
+			title: __('No invoices to check'),
+			description: __('This site has no submitted invoices from before the upgrade on {0}. There is nothing to compare with TaxJar.', [frappe.datetime.str_to_user(state.cutoff_date)]),
+		}));
+		return;
+	}
+
+	frm.fields_dict.legacy_check_status_html.$wrapper.html(`
+		<div class="form-group">
+			<div class="clearfix"><label class="control-label">${__('Status')}</label></div>
+			${frappe.ui.badge.html({ label: __(state.status), theme: LEGACY_STATUS_THEMES[state.status], size: 'lg' })}
+		</div>
+	`);
+
+	_set_legacy_button(frm, state);
+	$companies.append(_legacy_companies_table(frm, state));
+
+	const $alerts = $('<div class="taxjar-legacy-alerts"></div>')
+		.css({ display: 'grid', gap: 'var(--margin-sm)', 'margin-top': 'var(--margin-md)' })
+		.appendTo($companies);
+	_legacy_alerts(state).forEach((alert) => $alerts.append(alert));
+}
+
+function _set_legacy_button(frm, state) {
+	const live = state.api_mode === 'Live';
+	const running = state.status === 'Running';
+	const first_run = state.status === 'Pending';
+
+	let description = __('About 2 API calls per month of history for each company.');
+	if (!live) description = __('Change API Mode to Live in TaxJar Setup to run the check.');
+	else if (running) description = __('The check runs in the background. You can leave this page.');
+	else if (!state.pending) description = __('Every invoice from before the upgrade is checked.');
+
+	frm.toggle_display('run_legacy_check_btn', true);
+	frm.set_df_property('run_legacy_check_btn', 'label', first_run ? __('Run Check') : __('Check Again'));
+	frm.set_df_property('run_legacy_check_btn', 'description', description);
+	// After set_df_property, which draws the button again.
+	frm.fields_dict.run_legacy_check_btn.$input?.prop('disabled', !live || running || !state.pending);
+}
+
+function _legacy_companies_table(frm, state) {
+	const $table = $(`
+		<div class="table-responsive">
+			<table class="table table-bordered" style="margin: 0;">
+				<thead><tr>
+					<th>${__('Company')}</th>
+					<th>${__('Range')}</th>
+					<th class="text-right">${__('Not checked')}</th>
+					<th class="text-right">${__('Found')}</th>
+					<th class="text-right">${__('Not found')}</th>
+					<th class="text-right">${__('Cancelled, still in TaxJar')}</th>
+					<th style="min-width: 180px;">${__('Result')}</th>
+				</tr></thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	`);
+	const $body = $table.find('tbody');
+
+	state.companies.forEach((row) => {
+		const first_month = row.first_month || '';
+		const range = first_month ? `${first_month} → ${state.cutoff_month}` : '—';
+		const $row = $(`
+			<tr>
+				<td>${frappe.utils.escape_html(row.company)}</td>
+				<td style="font-variant-numeric: tabular-nums;">${range}</td>
+				<td class="text-right legacy-pending"></td>
+				<td class="text-right legacy-found"></td>
+				<td class="text-right legacy-not-found"></td>
+				<td class="text-right legacy-stale"></td>
+				<td class="legacy-result"></td>
+			</tr>
+		`).appendTo($body);
+
+		const open = (tab) => _open_transactions(row.company, first_month, state.cutoff_date, tab);
+		$row.find('.legacy-pending').append(_legacy_count(row.pending, () => open('not_applicable')));
+		$row.find('.legacy-found').append(_legacy_count(row.found, () => open('synced')));
+		$row.find('.legacy-not-found').append(_legacy_count(row.not_found, () => open('not_applicable')));
+		$row.find('.legacy-stale').append(_legacy_count(row.cancelled_in_taxjar, () => open('failed')));
+		$row.find('.legacy-result').append(_legacy_result(frm, state, row));
+	});
+
+	return $table;
+}
+
+function _legacy_count(value, onclick) {
+	if (value === undefined || value === null) return $('<span class="text-muted">—</span>');
+	if (!value) return $('<span class="text-muted">0</span>');
+	return $('<a href="#" style="font-variant-numeric: tabular-nums;"></a>')
+		.text(format_number(value, null, 0))
+		.on('click', (e) => {
+			e.preventDefault();
+			onclick();
+		});
+}
+
+function _legacy_result(frm, state, row) {
+	if (row.pending && !row.has_credential) {
+		return frappe.ui.badge.html({ label: __('No credential'), theme: 'amber' });
+	}
+	if (row.pending && state.api_mode !== 'Live') {
+		return frappe.ui.badge.html({ label: __('Sandbox mode'), theme: 'amber' });
+	}
+	if (row.pending && state.status === 'Running') {
+		const progress = { month: 0, months: 0 };
+		progress.bar = frappe.ui.progress({
+			value: 0,
+			size: 'md',
+			hint: () => (progress.months
+				? __('Month {0} of {1}', [progress.month, progress.months])
+				: __('Starting…')),
+		});
+		frm._legacy_progress[row.company] = progress;
+		return progress.bar;
+	}
+	if (row.result === 'failed') {
+		return frappe.ui.badge.html({ label: __('Failed'), theme: 'red', title: row.error || '' });
+	}
+	if (row.result === 'done' && !row.pending) {
+		return frappe.ui.badge.html({ label: __('Done'), theme: 'green' });
+	}
+	return frappe.ui.badge.html({ label: __('Not checked') });
+}
+
+function _legacy_alerts(state) {
+	const alerts = [];
+	const open_setup = () => frappe.ui.button({
+		label: __('Open TaxJar Setup'),
+		icon: 'settings',
+		size: 'sm',
+		variant: 'outline',
+		onclick: () => _open_setup_connection(),
+	});
+	const waiting = state.companies.filter((row) => row.pending);
+
+	if (waiting.length && state.api_mode !== 'Live') {
+		alerts.push(frappe.ui.alert({
+			theme: 'yellow',
+			title: __('The check runs in Live mode only.'),
+			description: __('Version 15 sent sandbox invoices to the sandbox account. A match there does not prove that the live account has the invoice. Change API Mode to Live in TaxJar Setup, then run the check.'),
+			footer: open_setup(),
+		}));
+		return alerts;
+	}
+
+	state.companies.forEach((row) => {
+		if (row.result === 'failed' && row.pending) {
+			alerts.push(frappe.ui.alert({
+				theme: 'red',
+				title: __('TaxJar did not answer the check for {0}.', [row.company]),
+				description: __('{0} No invoice of this company changed. Check the live token in TaxJar Setup, then click Check Again.', [row.error || '']),
+				footer: open_setup(),
+			}));
+		}
+
+		if (row.cancelled_in_taxjar && !row.pending) {
+			alerts.push(frappe.ui.alert({
+				theme: 'yellow',
+				title: __('{0} invoices of {1} are cancelled in ERPNext but are still in TaxJar.', [row.cancelled_in_taxjar, row.company]),
+				description: __('Their status is Failed. Retry them on the Transaction Sync page to remove them from TaxJar.'),
+				footer: frappe.ui.button({
+					label: __('Open in Transaction Sync'),
+					icon: 'external-link',
+					size: 'sm',
+					variant: 'outline',
+					onclick: () => _open_transactions(row.company, row.first_month, state.cutoff_date, 'failed'),
+				}),
+			}));
+		}
+
+		if (row.pending && !row.has_credential) {
+			alerts.push(frappe.ui.alert({
+				theme: 'blue',
+				title: __('{0} invoices of {1} are not checked.', [row.pending, row.company]),
+				description: __('This company has no live token. Add one in TaxJar Setup, then run the check.'),
+				footer: open_setup(),
+			}));
+		}
+	});
+
+	return alerts;
+}
+
+// The Connection card holds the token and the API mode. frappe.set_route puts
+// route_options in the URL, and the setup page reads `focus` from there.
+function _open_setup_connection() {
+	frappe.route_options = { focus: 'connect' };
+	frappe.set_route('taxjar-setup');
+}
+
+function _open_transactions(company, first_month, cutoff_date, tab) {
+	// set_route writes these into the URL, where an undefined value would
+	// arrive as the word "undefined".
+	frappe.route_options = { company, to_date: cutoff_date, tab };
+	if (first_month) frappe.route_options.from_date = `${first_month}-01`;
+	frappe.set_route('taxjar-transactions');
+}
+
+function _on_legacy_progress(frm, message) {
+	if (message.done) {
+		frm.reload_doc();
+		return;
+	}
+	const progress = frm._legacy_progress?.[message.company];
+	if (!progress) return;
+	progress.month = message.month;
+	progress.months = message.months;
+	progress.bar.data('es-progress')?.set_value(Math.round((message.month / message.months) * 100));
+}
+
 frappe.ui.form.on('TaxJar Settings', {
 	// This record decides what every transaction form is allowed to do, and the
 	// forms memoise that answer per company for the life of the page (see
@@ -122,6 +368,12 @@ frappe.ui.form.on('TaxJar Settings', {
 		_render_nexus_last_synced(frm);
 		_render_product_tax_category_html(frm);
 		_set_api_mode_description(frm);
+		_refresh_legacy_tab(frm);
+
+		if (!frm._legacy_listener) {
+			frm._legacy_listener = (message) => _on_legacy_progress(frm, message);
+			frappe.realtime.on(LEGACY_PROGRESS_EVENT, frm._legacy_listener);
+		}
 
 		// A TaxJar User reads these settings; only a TaxJar Manager (write)
 		// syncs the two lists. Frappe keeps a Button field visible on a
@@ -154,6 +406,15 @@ frappe.ui.form.on('TaxJar Settings', {
 				_render_nexus_last_synced(frm);
 				frappe.show_alert({ message: __('Nexus regions fetched and updated.'), indicator: 'green' }, 5);
 			},
+		});
+	},
+
+	run_legacy_check_btn(frm) {
+		frappe.call({
+			method: `${LEGACY_CHECK}.run_legacy_check`,
+			type: 'POST',
+			freeze: true,
+			callback: () => frm.reload_doc(),
 		});
 	},
 
