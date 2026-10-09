@@ -100,9 +100,9 @@ def get_customizations():
 	would hide every Custom Field on Sales Invoice, including fields other apps and the
 	site's own users wrote.
 
-	Custom DocPerm rows are not here. add_permissions() only changes permissions on
-	Product Tax Category, which this app owns. Frappe conceals a disabled app's own
-	doctypes, so those rows are already out of reach.
+	Custom DocPerm rows are not here. The app writes none: the rights on its own
+	doctypes live in their JSON, and Frappe conceals a disabled app's own doctypes
+	whole.
 	"""
 	return {
 		"Custom Field": [

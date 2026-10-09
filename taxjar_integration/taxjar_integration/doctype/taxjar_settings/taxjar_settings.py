@@ -15,7 +15,6 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.model.document import Document
-from frappe.permissions import add_permission, update_permission_property
 from frappe.utils.file_lock import LockTimeoutError
 from frappe.utils.synchronization import filelock
 
@@ -1272,18 +1271,3 @@ def set_taxes_field_description():
 	read as broken - it's populated by set_sales_tax() on save, not on load."""
 	for doctype in _TAXES_FIELD_DOCTYPES:
 		make_property_setter(doctype, "taxes", "description", _TAXES_FIELD_DESCRIPTION, "Table")
-
-
-def add_permissions():
-	doctype = "Product Tax Category"
-	for role in (
-		"Accounts Manager",
-		"Accounts User",
-		"System Manager",
-		"Item Manager",
-		"Stock Manager",
-	):
-		if not frappe.db.exists("DocPerm", {"parent": doctype, "role": role, "permlevel": 0}):
-			add_permission(doctype, role, 0)
-		update_permission_property(doctype, role, 0, "write", 1)
-		update_permission_property(doctype, role, 0, "create", 1)

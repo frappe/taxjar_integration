@@ -1,7 +1,6 @@
 import frappe
 
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
-	add_permissions,
 	add_product_tax_categories,
 	hide_legacy_exempt_from_sales_tax,
 	make_custom_fields,
@@ -148,8 +147,8 @@ def setup_taxjar():
 
 	* custom fields (the Customer/Sales Invoice ``taxjar_*`` columns) — created up
 	  front so the desk pages never query columns that don't exist (MySQLdb 1054);
-	* the Product Tax Category master (~800 rows from the bundled fixture) and the
-	  permissions that let the accounting/stock roles manage it. The fixture is
+	* the Product Tax Category master (~800 rows from the bundled fixture). Who may
+	  read or change it is set in its doctype JSON, not here. The fixture is
 	  applied on every run, not only on the first one: create_tax_categories()
 	  inserts a code the site does not hold and leaves every other row alone, so
 	  a site seeded by an older release picks up the codes added since;
@@ -166,8 +165,6 @@ def setup_taxjar():
 	make_custom_fields()
 
 	add_product_tax_categories()
-
-	add_permissions()
 
 	sync_all_company_tax_templates()
 

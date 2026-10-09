@@ -11255,13 +11255,12 @@ class TestInstallSetup(UnitTestCase):
 
 		with patch("taxjar_integration.install.make_custom_fields") as mock_make, \
 		     patch("taxjar_integration.install.add_product_tax_categories") as mock_cats, \
-		     patch("taxjar_integration.install.add_permissions") as mock_perms, \
 		     patch("taxjar_integration.install.sync_all_company_tax_templates") as mock_sync, \
 		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax") as mock_hide, \
 		     patch("taxjar_integration.install.set_taxes_field_description") as mock_desc, \
 		     patch("taxjar_integration.install.add_guided_setup_alert") as mock_alert:
 			install.setup_taxjar()
-		return mock_make, mock_cats, mock_perms, mock_sync, mock_hide, mock_desc, mock_alert
+		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert
 
 	def test_after_install_runs_full_setup(self):
 		from taxjar_integration import install
@@ -11269,10 +11268,9 @@ class TestInstallSetup(UnitTestCase):
 			install.after_install()
 		mock_setup.assert_called_once()
 
-		mock_make, mock_cats, mock_perms, mock_sync, mock_hide, mock_desc, mock_alert = self._run_setup()
+		mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert = self._run_setup()
 		mock_make.assert_called_once()
 		mock_cats.assert_called_once()
-		mock_perms.assert_called_once()
 		mock_sync.assert_called_once()
 		mock_hide.assert_called_once()
 		mock_desc.assert_called_once()
@@ -18572,8 +18570,8 @@ class TestAppToggle(UnitTestCase):
 		self.assertEqual(get_customizations(), get_customizations())
 
 	def test_product_tax_category_permissions_stay_out(self):
-		"""add_permissions() only touches this app's own doctype, which frappe
-		conceals whole while the app is off."""
+		"""The app writes no Custom DocPerm rows: its rights live in its own
+		doctype JSON, which frappe conceals whole while the app is off."""
 		from taxjar_integration.app_toggle import get_customizations
 
 		self.assertNotIn("Custom DocPerm", get_customizations())
@@ -23780,3 +23778,138 @@ class TestBulkSyncAndCronRespectTheRestriction(UnitTestCase):
 			[(c[1]["customer_name"], c[1]["company"]) for c in mock_enqueue.call_args_list],
 			[("CUST-001", "B Co"), ("CUST-003", "A Co"), ("CUST-003", "B Co")],
 		)
+
+
+# ── Persona permissions on the app's own doctypes ────────────────────────────
+
+
+class TestPersonaDoctypePermissions(UnitTestCase):
+	"""The rights each doctype JSON ships, read from the files themselves.
+
+	Read from the JSON and not from frappe.get_meta(): a site's Custom DocPerm
+	rows replace the JSON rights, so the meta answers for one site, while the
+	user documentation promises what the app ships. The personas are defined
+	by TaxJar Settings: write makes a TaxJar Manager, read a TaxJar User.
+	"""
+
+	_RIGHTS = ("read", "write", "create", "delete", "report", "export")
+
+	def _rights(self, doctype):
+		import json
+		import os
+
+		folder = frappe.scrub(doctype)
+		path = os.path.join(os.path.dirname(__file__), "..", folder, f"{folder}.json")
+		with open(path) as handle:
+			permissions = json.load(handle)["permissions"]
+		return {
+			row["role"]: {right for right in self._RIGHTS if row.get(right)}
+			for row in permissions
+		}
+
+	def test_a_taxjar_user_reads_the_settings_and_cannot_change_them(self):
+		rights = self._rights("TaxJar Settings")
+		self.assertEqual(rights["Accounts User"], {"read"})
+		self.assertIn("write", rights["Accounts Manager"])
+		self.assertIn("write", rights["System Manager"])
+
+	def test_a_taxjar_user_reads_the_api_log(self):
+		"""The log holds customer names and addresses, which an Accounts User
+		already reads on the invoices and customers themselves."""
+		rights = self._rights("TaxJar API Log")
+		self.assertEqual(rights["Accounts User"], {"read", "report"})
+		self.assertEqual(rights["Accounts Manager"], {"read", "report"})
+
+	def test_product_tax_category_is_kept_by_managers_and_read_by_everyone(self):
+		"""The list comes from TaxJar, so only a TaxJar Manager may change it.
+		Every desk user reads it, because anyone who edits an Item picks from it."""
+		rights = self._rights("Product Tax Category")
+		self.assertEqual(set(rights), {"System Manager", "Accounts Manager", "Accounts User", "Desk User"})
+		for manager in ("System Manager", "Accounts Manager"):
+			self.assertTrue({"read", "write", "create", "delete"} <= rights[manager], manager)
+		self.assertEqual(rights["Accounts User"], {"read"})
+		self.assertEqual(rights["Desk User"], {"read"})
+
+	def test_the_app_writes_no_permission_rules_of_its_own(self):
+		"""A Custom DocPerm row replaces a doctype's JSON rights on that site, so
+		the rights a later version ships would never arrive there."""
+		import os
+
+		root = os.path.dirname(frappe.get_module_path("taxjar_integration"))
+		offenders = []
+		for folder, _dirs, files in os.walk(root):
+			for name in files:
+				if not name.endswith(".py") or name.startswith("test_"):
+					continue
+				with open(os.path.join(folder, name)) as handle:
+					source = handle.read()
+				if "add_permission(" in source or "update_permission_property(" in source:
+					offenders.append(name)
+		self.assertEqual(offenders, [])
+
+
+class TestRemoveAppProductTaxCategoryPerms(UnitTestCase):
+	"""The patch that hands Product Tax Category back to its JSON rights."""
+
+	MOD = "taxjar_integration.patches.remove_app_product_tax_category_perms"
+
+	def _app_rows(self):
+		# As add_permissions() left them on a real site: the System Manager row
+		# copied from the old JSON, and four rows of read, write and create.
+		blank = dict.fromkeys(
+			("permlevel", "if_owner", "delete", "submit", "cancel", "amend", "report",
+			 "import", "print", "email", "share", "select", "mask"), 0)
+		system_manager = {**blank, "role": "System Manager", "read": 1, "write": 1, "create": 1,
+		                  "delete": 1, "report": 1, "export": 1, "print": 1, "email": 1, "share": 1}
+		others = [
+			{**blank, "role": role, "read": 1, "write": 1, "create": 1, "export": 1}
+			for role in ("Accounts Manager", "Accounts User", "Item Manager", "Stock Manager")
+		]
+		return [frappe._dict(row) for row in [system_manager, *others]]
+
+	def _matches(self, rows):
+		from taxjar_integration.patches.remove_app_product_tax_category_perms import is_app_created
+
+		return is_app_created(rows)
+
+	def test_the_rows_the_app_wrote_are_recognised(self):
+		self.assertTrue(self._matches(self._app_rows()))
+
+	def test_export_left_off_still_matches(self):
+		"""Custom DocPerm's default for export has changed between Frappe versions."""
+		rows = self._app_rows()
+		for row in rows[1:]:
+			row.export = 0
+		self.assertTrue(self._matches(rows))
+
+	def test_a_row_an_admin_changed_is_not_touched(self):
+		rows = self._app_rows()
+		rows[1].delete = 1
+		self.assertFalse(self._matches(rows))
+
+	def test_a_role_an_admin_added_is_not_touched(self):
+		extra = frappe._dict({**self._app_rows()[1], "role": "Sales User"})
+		self.assertFalse(self._matches(self._app_rows() + [extra]))
+
+	def test_no_rows_is_no_match(self):
+		self.assertFalse(self._matches([]))
+
+	def test_execute_deletes_only_a_match(self):
+		from taxjar_integration.patches import remove_app_product_tax_category_perms as patch_module
+
+		for rows, deleted in ((self._app_rows(), True), (self._app_rows()[:4], False)):
+			with self.subTest(deleted=deleted):
+				with patch.object(patch_module.frappe, "get_all", return_value=rows), \
+				     patch.object(patch_module.frappe.db, "delete") as mock_delete, \
+				     patch.object(patch_module.frappe, "clear_cache"):
+					patch_module.execute()
+				self.assertEqual(mock_delete.called, deleted)
+
+	def test_the_patch_is_registered(self):
+		import os
+
+		import taxjar_integration
+
+		path = os.path.join(os.path.dirname(taxjar_integration.__file__), "patches.txt")
+		with open(path) as handle:
+			self.assertIn(self.MOD, handle.read())
