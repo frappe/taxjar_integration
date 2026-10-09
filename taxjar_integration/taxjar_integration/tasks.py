@@ -35,11 +35,6 @@ def purge_old_api_logs():
 	frappe.db.delete("TaxJar API Log", {"creation": ("<", cutoff)})
 
 
-# Who hears about a nexus sync that did not run. Nexus decides whether tax is
-# charged at all, so this is an accounting fact before it is an administrative
-# one - the accountant is told, not only whoever keeps the site.
-NEXUS_ALERT_ROLES = ("Accounts Manager", "System Manager")
-
 # Where the notification lands: the page that shows the nexus per company and
 # the date it last came from TaxJar. Site-relative, because a notification row
 # belongs to one site and the host it is read on is not this job's to know.
@@ -75,8 +70,27 @@ def sync_nexus_list():
 		)
 
 
+def taxjar_user_roles():
+	"""Every role with read on TaxJar Settings: the TaxJar User persona, with the
+	TaxJar Managers (write) included.
+
+	Who hears about a nexus sync that did not run. Nexus decides whether tax is
+	charged at all, so this is an accounting fact before it is an administrative
+	one - the accountant is told, not only whoever keeps the site.
+
+	Read from the meta, so the site's own Custom DocPerm rows count. An admin who
+	gives a role read on TaxJar Settings makes its holders TaxJar Users, and they
+	hear about a failed sync too.
+	"""
+	return sorted({
+		perm.role
+		for perm in frappe.get_meta("TaxJar Settings").permissions
+		if not perm.permlevel and perm.read
+	})
+
+
 def notify_nexus_sync_failure(message):
-	"""Raise a desk notification for the roles that can act on it.
+	"""Raise a desk notification for every TaxJar User.
 
 	The failure reached the Error Log and nothing else. Nexus decides whether
 	tax is charged, so a sync that stops is a sale that stops collecting - and
@@ -92,7 +106,7 @@ def notify_nexus_sync_failure(message):
 	)
 	from frappe.utils.user import get_users_with_role
 
-	users = sorted({user for role in NEXUS_ALERT_ROLES for user in get_users_with_role(role)})
+	users = sorted({user for role in taxjar_user_roles() for user in get_users_with_role(role)})
 	if not users:
 		return
 

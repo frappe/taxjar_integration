@@ -4161,13 +4161,65 @@ class TestNexusSyncFailureReachesSomebody(UnitTestCase):
 		self.assertTrue(NEXUS_PAGE_ROUTE.startswith("/"))
 		self.assertNotIn("://", NEXUS_PAGE_ROUTE)
 
-	def test_both_roles_are_asked_for(self):
-		"""The accountant is told, not only whoever keeps the site."""
-		from taxjar_integration.taxjar_integration.tasks import NEXUS_ALERT_ROLES
+	def _meta_with(self, *rows):
+		meta = MagicMock()
+		meta.permissions = [frappe._dict(row) for row in rows]
+		return meta
 
-		self.assertEqual(sorted(NEXUS_ALERT_ROLES), ["Accounts Manager", "System Manager"])
-		for role in NEXUS_ALERT_ROLES:
-			self.assertTrue(frappe.db.exists("Role", role), role)
+	def test_every_taxjar_user_is_told(self):
+		"""The alert goes to the TaxJar User persona: every role with read on
+		TaxJar Settings, the Managers included."""
+		from taxjar_integration.taxjar_integration import tasks
+
+		meta = self._meta_with(
+			{"role": "System Manager", "permlevel": 0, "read": 1, "write": 1},
+			{"role": "Accounts Manager", "permlevel": 0, "read": 1, "write": 1},
+			{"role": "Accounts User", "permlevel": 0, "read": 1, "write": 0},
+		)
+		with patch.object(tasks.frappe, "get_meta", return_value=meta):
+			self.assertEqual(
+				tasks.taxjar_user_roles(), ["Accounts Manager", "Accounts User", "System Manager"]
+			)
+
+	def test_the_alert_follows_an_admins_own_mapping(self):
+		"""An admin who gives their own role read on TaxJar Settings makes its
+		holders TaxJar Users, and they hear about a failed sync too. A row
+		without read, or above permlevel 0, makes nobody a TaxJar User."""
+		from taxjar_integration.taxjar_integration import tasks
+
+		meta = self._meta_with(
+			{"role": "Tax Desk", "permlevel": 0, "read": 1, "write": 0},
+			{"role": "Report Viewer", "permlevel": 0, "read": 0, "write": 0},
+			{"role": "Field Reader", "permlevel": 1, "read": 1, "write": 0},
+		)
+		with patch.object(tasks.frappe, "get_meta", return_value=meta):
+			self.assertEqual(tasks.taxjar_user_roles(), ["Tax Desk"])
+
+	def test_each_taxjar_user_role_is_asked_for_its_users(self):
+		"""A user who holds two of the roles is told once."""
+		from taxjar_integration.taxjar_integration import tasks
+
+		holders = {"Accounts Manager": ["lead@example.com"], "Accounts User": ["acc@example.com", "lead@example.com"]}
+		with patch.object(tasks, "taxjar_user_roles", return_value=sorted(holders)), \
+		     patch("frappe.utils.user.get_users_with_role", side_effect=lambda role: holders[role]), \
+		     patch(
+			"frappe.desk.doctype.notification_log.notification_log.enqueue_create_notification"
+		     ) as mock_notify:
+			tasks.notify_nexus_sync_failure("anything")
+
+		users, _payload = mock_notify.call_args[0]
+		self.assertEqual(users, ["acc@example.com", "lead@example.com"])
+
+	def test_the_shipped_rights_make_accounts_user_a_taxjar_user(self):
+		"""Read from the JSON the app ships, not from this site's meta."""
+		import json
+		import os
+
+		path = os.path.join(os.path.dirname(__file__), "taxjar_settings.json")
+		with open(path) as handle:
+			rows = json.load(handle)["permissions"]
+		readers = {row["role"] for row in rows if row.get("read") and not row.get("permlevel")}
+		self.assertEqual(readers, {"System Manager", "Accounts Manager", "Accounts User"})
 
 	def test_nobody_to_tell_is_not_an_error(self):
 		"""A site with neither role filled: the job still finishes."""
