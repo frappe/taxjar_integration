@@ -585,3 +585,178 @@
 		height: 100%;
 	}
 }
+
+// ── CSAT sidebar card ─────────────────────────────────────────────────────
+// frappe.ui.SidebarCard, set to look like the frappe-ui SidebarCard: 12px
+// padding and a small ghost close button in the corner. The desk card has no
+// options for these, so the rules go here.
+
+.frappe-card.taxjar-csat-card {
+	// Monochrome button: the desk card reads its button colors from these.
+	--frappe-card-button-bg-color: var(--surface-gray-2);
+	--frappe-card-button-color: var(--ink-gray-8);
+	--frappe-card-button-outline: var(--surface-gray-3);
+
+	position: relative;
+	gap: 12px;
+	padding: 12px;
+
+	.frappe-card-icon {
+		stroke-width: 1.25px;
+	}
+
+	.frappe-card-title-container {
+		align-items: center;
+		// Room for the close button, which sits over this row.
+		padding-right: 28px;
+	}
+
+	.frappe-card-title {
+		font-size: var(--text-sm);
+		font-weight: var(--font-weight-regular);
+	}
+
+	.frappe-card-description:empty {
+		display: none;
+	}
+
+	.close-button {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: transparent;
+		box-shadow: none;
+
+		&:hover {
+			background: var(--surface-gray-2);
+		}
+	}
+
+	.frappe-card-button {
+		font-size: var(--text-sm);
+
+		&:hover {
+			background-color: var(--surface-gray-3);
+		}
+	}
+}
+
+// A collapsed sidebar is a 48px rail of icons, with no room for the card.
+// Same breakpoint as the desk's own collapsed rules; on a phone the sidebar
+// opens as a full panel. !important beats the card's d-inline-flex.
+@media (min-width: 768px) {
+	.body-sidebar-container:not(.expanded) .taxjar-csat-card {
+		display: none !important;
+	}
+}
+
+// ── CSAT feedback scale ───────────────────────────────────────────────────
+// The 1–5 score buttons in the feedback dialog (FeedbackScale in csat_card.js).
+// Each button always shows the tint of its score; the picked one is solid.
+// Theme tokens, so the colors follow the dark theme.
+
+.taxjar-feedback-scale {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: var(--margin-md);
+
+	.control-label {
+		margin-bottom: 0;
+	}
+}
+
+.taxjar-feedback-scale-options {
+	display: flex;
+	gap: 6px;
+}
+
+.taxjar-feedback-scale-option {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 36px;
+	padding: 0;
+	border: none;
+	border-radius: 8px;
+	background: var(--scale-tint);
+	color: var(--scale-ink);
+	font-size: var(--text-base);
+	font-weight: var(--font-weight-medium);
+	cursor: pointer;
+	transition:
+		background 0.12s,
+		color 0.12s,
+		box-shadow 0.12s,
+		opacity 0.12s;
+
+	&[data-score="1"] {
+		--scale-tint: var(--surface-red-2);
+		--scale-ink: var(--ink-red-7);
+		--scale-solid: var(--surface-red-6);
+		--scale-on: var(--white);
+	}
+
+	&[data-score="2"] {
+		--scale-tint: var(--surface-orange-2);
+		--scale-ink: var(--ink-orange-7);
+		--scale-solid: var(--surface-orange-6);
+		--scale-on: var(--white);
+	}
+
+	&[data-score="3"] {
+		--scale-tint: var(--surface-amber-2);
+		--scale-ink: var(--ink-amber-7);
+		--scale-solid: var(--surface-amber-6);
+		// Amber is light, so dark text reads better on it, in both themes.
+		--scale-on: var(--amber-900);
+	}
+
+	// Frappe has no lime, so 4 is the lighter green and 5 the darker one.
+	&[data-score="4"] {
+		--scale-tint: var(--surface-green-2);
+		--scale-ink: var(--ink-green-7);
+		--scale-solid: var(--surface-green-6);
+		--scale-on: var(--white);
+	}
+
+	&[data-score="5"] {
+		--scale-tint: var(--surface-green-2);
+		--scale-ink: var(--ink-green-7);
+		--scale-solid: var(--green-600);
+		--scale-on: var(--white);
+	}
+
+	&:hover {
+		box-shadow: inset 0 0 0 1px var(--scale-solid);
+	}
+
+	&:focus-visible {
+		outline: none;
+		box-shadow: var(--focus-default);
+	}
+
+	&[aria-checked="true"] {
+		background: var(--scale-solid);
+		color: var(--scale-on);
+		box-shadow:
+			0 0 0 2px var(--modal-bg),
+			0 0 0 4px var(--scale-solid);
+	}
+
+	// After a pick, fade the other scores. 0.7, not the design's 0.55, keeps
+	// the numbers readable.
+	.has-score &:not([aria-checked="true"]):not(:hover) {
+		opacity: 0.7;
+	}
+}
+
+.taxjar-feedback-scale-label {
+	height: 16px;
+	font-size: var(--text-xs);
+	color: var(--ink-gray-5);
+}

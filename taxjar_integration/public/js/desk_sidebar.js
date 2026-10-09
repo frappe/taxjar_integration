@@ -20,17 +20,24 @@ if (!window.taxjar_integration) {
 
 // Only this app's own sidebar. Other apps author their own closed groups (the
 // ERPNext "Taxes" workspace has two), and their behaviour is not ours to change.
-const TAXJAR_SIDEBAR_TITLE = "taxjar integration";
+// The desk names a sidebar by its Workspace Sidebar record, in exact case
+// (sidebar.current_module). This app ships that record as "TaxJar".
+const TAXJAR_SIDEBAR = "TaxJar";
+
+/** Is this the sidebar of the TaxJar app? */
+taxjar_integration.is_taxjar_sidebar = function (sidebar) {
+	return Boolean(sidebar) && sidebar.current_module === TAXJAR_SIDEBAR;
+};
 
 // The desk's own store for "the user clicked this group open or closed".
 // Written by frappe.ui.sidebar_item.TypeSectionBreak.save_section_break_state.
 const SECTION_CLICK_STATE_KEY = "section-breaks-state";
 
 /** The group labels the user has clicked in this workspace, as a plain object. */
-function clicked_groups(workspace_title) {
+function clicked_groups(sidebar_name) {
 	try {
 		const raw = localStorage.getItem(SECTION_CLICK_STATE_KEY);
-		return (raw ? JSON.parse(raw) : {})[workspace_title] || {};
+		return (raw ? JSON.parse(raw) : {})[sidebar_name] || {};
 	} catch (error) {
 		// A blocked or corrupt localStorage means no click is on record, which
 		// is the safe reading: the authored default then applies.
@@ -65,9 +72,9 @@ function holds_current_page(section) {
  * not in, unless the user clicked that group themselves.
  */
 taxjar_integration.collapse_unvisited_sidebar_groups = function (sidebar) {
-	if (!sidebar || sidebar.workspace_title !== TAXJAR_SIDEBAR_TITLE) return;
+	if (!taxjar_integration.is_taxjar_sidebar(sidebar)) return;
 
-	const clicked = clicked_groups(sidebar.workspace_title);
+	const clicked = clicked_groups(sidebar.current_module);
 
 	(sidebar.items || []).forEach((section) => {
 		// A group with no links never renders a header to collapse, so it has
