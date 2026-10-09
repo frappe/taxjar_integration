@@ -283,6 +283,24 @@ class TestTaxJarSettings(UnitTestCase):
 		self.settings.set("company_config", [])
 		self.settings.set("nexus", [])
 
+		# validate() refuses a company registered outside the United States, and
+		# reads the country off the Company record. _Test Company is a site
+		# record this class does not own: ERPNext's own test fixtures make it an
+		# Indian company, so its country changed under these tests once already.
+		# Each test says which country the company has; every other read goes
+		# through to the database.
+		self.company_country = "United States"
+		real_get_value = frappe.db.get_value
+
+		def get_value(doctype, *args, **kwargs):
+			if doctype == "Company" and args[1:2] == ("country",):
+				return self.company_country
+			return real_get_value(doctype, *args, **kwargs)
+
+		patcher = patch.object(frappe.db, "get_value", side_effect=get_value)
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 	def _add_sandbox_credential(self):
 		self.settings.append("table_hvjw", {
 			"company": "_Test Company",
@@ -384,6 +402,59 @@ class TestTaxJarSettings(UnitTestCase):
 		self._add_sandbox_credential()
 		self._enable_feature(calculate=1, create=1)
 		self.settings.validate()  # must not raise
+
+	# validate() — the company must be one TaxJar can serve
+
+	def test_a_company_registered_outside_the_united_states_is_refused(self):
+		"""The same settings that pass for a United States company are refused,
+		and the message names the company, the country and the row."""
+		self.company_country = "India"
+		self.settings.api_mode = "Sandbox"
+		self._add_sandbox_credential()
+		self._enable_feature(calculate=1, create=1)
+
+		with self.assertRaises(frappe.exceptions.ValidationError) as ctx:
+			self.settings.validate()
+
+		message = str(ctx.exception)
+		for part in ("Row 1", "_Test Company", "India"):
+			self.assertIn(part, message)
+
+	def test_a_company_outside_the_united_states_is_refused_with_no_feature_on(self):
+		"""The check is on the row, not on the features: a company TaxJar cannot
+		serve does not belong in the configuration at all."""
+		self.company_country = "Canada"
+		self._enable_feature()
+
+		with self.assertRaises(frappe.exceptions.ValidationError):
+			self.settings.validate()
+
+	def test_a_credential_for_a_company_outside_the_united_states_is_refused(self):
+		"""A credential row is checked on its own, without any company row."""
+		self.company_country = "India"
+		self._add_sandbox_credential()
+
+		with self.assertRaises(frappe.exceptions.ValidationError):
+			self.settings.validate()
+
+	def test_a_company_with_no_country_recorded_is_not_refused(self):
+		"""No country is not a foreign country. The check refuses only a company
+		it knows to be registered elsewhere."""
+		self.company_country = None
+		self.settings.api_mode = "Sandbox"
+		self._add_sandbox_credential()
+		self._enable_feature(calculate=1)
+
+		self.settings.validate()  # must not raise
+
+	def test_only_the_company_country_is_answered_by_the_test(self):
+		"""The stand-in answers one question. Every other read still reaches the
+		database, so the rest of validate() is tested against the real site."""
+		self.assertEqual(frappe.db.get_value("Company", "_Test Company", "country"), "United States")
+		self.assertEqual(
+			frappe.db.get_value("Country", "United States", "name"),
+			"United States",
+		)
 
 	# validate() — feature independence
 
