@@ -4,7 +4,7 @@
  "doctype": "Page",
  "icon": "map-pin",
  "idx": 0,
- "modified": "2026-09-29 00:00:00.000000",
+ "modified": "2026-10-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "TaxJar Integration",
  "name": "taxjar-nexus",
@@ -16,6 +16,9 @@
   },
   {
    "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
   }
  ],
  "standard": "Yes",

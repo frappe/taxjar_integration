@@ -123,6 +123,15 @@ frappe.ui.form.on('TaxJar Settings', {
 		_render_product_tax_category_html(frm);
 		_set_api_mode_description(frm);
 
+		// A TaxJar User reads these settings; only a TaxJar Manager (write)
+		// syncs the two lists. Frappe keeps a Button field visible on a
+		// read-only form, so these are hidden here. The server refuses the sync
+		// either way.
+		frm.toggle_display(
+			['update_nexus_list_btn', 'update_product_tax_category_btn'],
+			!!(frm.perm && frm.perm[0] && frm.perm[0].write)
+		);
+
 		const account_query = (doc, cdt, cdn) => {
 			const row = locals[cdt][cdn];
 			return { filters: { company: row.company, is_group: 0 } };

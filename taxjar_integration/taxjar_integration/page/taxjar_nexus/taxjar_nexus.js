@@ -63,6 +63,10 @@ class TaxJarNexusSummary {
 	// refresh controls are wired again here.
 	render(summary) {
 		summary = summary || {};
+		// A TaxJar User reads this page; only a TaxJar Manager syncs it. The
+		// server's check is what refuses a sync - this only keeps the reader
+		// from being offered a button that would.
+		this.can_sync = !!summary.can_sync;
 
 		this.$body.empty();
 		const $column = $('<div class="taxjar-nexus-column flex flex-col gap-8"></div>').appendTo(
@@ -255,6 +259,8 @@ class TaxJarNexusSummary {
 			'<span class="text-p-xs text-ink-gray-5 whitespace-nowrap taxjar-nexus-synced"></span>'
 		).appendTo($controls);
 
+		if (!this.can_sync) return $controls;
+
 		$('<span class="taxjar-nexus-sync-mount"></span>')
 			.append(
 				frappe.ui.button({
@@ -389,16 +395,23 @@ class TaxJarNexusSummary {
 		return frappe.ui.empty_state({
 			icon: "map-pin",
 			title: __("No nexus regions loaded"),
-			description: __("Fetch them from TaxJar using the button above."),
+			description: this._empty_state_hint(),
 			css_class: "my-2",
 		});
+	}
+
+	// A reader has no button above, so the hint names who can fetch the list.
+	_empty_state_hint() {
+		return this.can_sync
+			? __("Fetch them from TaxJar using the button above.")
+			: __("A TaxJar Manager can fetch them from TaxJar.");
 	}
 
 	_category_empty_state() {
 		return frappe.ui.empty_state({
 			icon: "tag",
 			title: __("No product tax categories loaded"),
-			description: __("Fetch them from TaxJar using the button above."),
+			description: this._empty_state_hint(),
 			css_class: "my-2",
 		});
 	}

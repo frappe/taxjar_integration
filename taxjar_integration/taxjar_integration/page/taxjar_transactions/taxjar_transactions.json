@@ -4,16 +4,13 @@
  "doctype": "Page",
  "icon": "file",
  "idx": 0,
- "modified": "2026-07-14 10:30:00.000000",
+ "modified": "2026-10-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "TaxJar Integration",
  "name": "taxjar-transactions",
  "owner": "Administrator",
  "page_name": "taxjar-transactions",
  "roles": [
-  {
-   "role": "System Manager"
-  },
   {
    "role": "Accounts Manager"
   },

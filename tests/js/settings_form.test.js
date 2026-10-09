@@ -110,8 +110,10 @@ describe("the ledger pickers", () => {
 					input_area: $("<div></div>")[0],
 				},
 			},
+			perm: [{ read: 1, write: 1 }],
 			set_intro() {},
 			set_df_property() {},
+			toggle_display() {},
 			set_query(fieldname, parentfield, query) {
 				queries[fieldname] = { parentfield, query };
 			},
@@ -129,6 +131,49 @@ describe("the ledger pickers", () => {
 				filters: { company: "US Off Co", is_group: 0 },
 			});
 		}
+	});
+});
+
+// A TaxJar User reads these settings; only a TaxJar Manager, who has write,
+// syncs the nexus and category lists. Frappe keeps a Button field visible on a
+// read-only form, so the form hides these two itself.
+describe("the sync buttons", () => {
+	const SYNC_BUTTONS = ["update_nexus_list_btn", "update_product_tax_category_btn"];
+
+	function refresh_as(perm) {
+		const shown = {};
+		const html_field = () => ({ $wrapper: $("<div></div>") });
+		const frm = {
+			doc: { setup_complete: 1, api_mode: "Sandbox", nexus: [] },
+			fields_dict: {
+				nexus_html: html_field(),
+				product_tax_category_html: html_field(),
+				update_nexus_list_btn: {
+					$wrapper: $("<div class='input-max-width'></div>"),
+					input_area: $("<div></div>")[0],
+				},
+			},
+			perm,
+			set_intro() {},
+			set_df_property() {},
+			toggle_display(fieldnames, show) {
+				for (const fieldname of [].concat(fieldnames)) shown[fieldname] = show;
+			},
+			set_query() {},
+			call: () => Promise.resolve({}),
+		};
+		handlers[SETTINGS].refresh(frm);
+		return shown;
+	}
+
+	it("show for a TaxJar Manager", () => {
+		const shown = refresh_as([{ read: 1, write: 1 }]);
+		for (const fieldname of SYNC_BUTTONS) expect(shown[fieldname]).toBe(true);
+	});
+
+	it("hide for a TaxJar User, who can only read", () => {
+		const shown = refresh_as([{ read: 1, write: 0 }]);
+		for (const fieldname of SYNC_BUTTONS) expect(shown[fieldname]).toBe(false);
 	});
 });
 

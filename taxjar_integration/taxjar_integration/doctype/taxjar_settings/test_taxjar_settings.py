@@ -3365,13 +3365,14 @@ class TestNexusPage(UnitTestCase):
 		self.assertEqual(data["module"], "TaxJar Integration")
 
 	def test_page_role_matches_the_permission_its_data_needs(self):
-		"""Every endpoint reads TaxJar Settings, which System Manager and
-		Accounts Manager can read - a wider role here would put the page in
-		someone's sidebar only for it to fail on open."""
+		"""Every endpoint reads TaxJar Settings. A TaxJar User (Accounts User)
+		reads it too, and gets the page read-only: the sync buttons are for a
+		TaxJar Manager, who has write."""
 		import json
 		data = json.loads(self._read("taxjar_nexus.json"))
 		self.assertEqual(
-			{r["role"] for r in data["roles"]}, {"System Manager", "Accounts Manager"}
+			{r["role"] for r in data["roles"]},
+			{"System Manager", "Accounts Manager", "Accounts User"},
 		)
 
 	def test_page_draws_its_own_cards_not_the_shared_table_renderers(self):
@@ -23998,3 +23999,125 @@ class TestRemoveAppProductTaxCategoryPerms(UnitTestCase):
 		path = os.path.join(os.path.dirname(taxjar_integration.__file__), "patches.txt")
 		with open(path) as handle:
 			self.assertIn(self.MOD, handle.read())
+
+
+# ── Persona page roles, workspace roles and the Nexus page's read-only view ──
+
+
+class TestPersonaPageAccess(UnitTestCase):
+	"""Which roles open each TaxJar page, and the workspace that lists them.
+
+	A page role is only the door. Each role listed must also hold the rights
+	the page's own data needs, or the page sits in that person's sidebar and
+	fails on open. The table below is the one the user documentation repeats.
+	"""
+
+	PAGES = {
+		"taxjar_setup": {"System Manager", "Accounts Manager"},
+		"taxjar_nexus": {"System Manager", "Accounts Manager", "Accounts User"},
+		"taxjar_transactions": {"Accounts Manager", "Accounts User"},
+		"taxjar_customers": {"Accounts Manager", "Accounts User"},
+	}
+
+	# The records each page lists, and the right a role needs to list them.
+	DATA = {
+		"taxjar_setup": ("TaxJar Settings", "write"),
+		"taxjar_nexus": ("TaxJar Settings", "read"),
+		"taxjar_transactions": ("Sales Invoice", "read"),
+		"taxjar_customers": ("Customer", "read"),
+	}
+
+	def _json(self, *parts):
+		import json
+		import os
+
+		path = os.path.join(os.path.dirname(__file__), "..", "..", *parts)
+		with open(path) as handle:
+			return json.load(handle)
+
+	def _page_roles(self, page):
+		return {row["role"] for row in self._json("page", page, f"{page}.json")["roles"]}
+
+	def test_each_page_opens_for_its_personas_only(self):
+		for page, roles in self.PAGES.items():
+			with self.subTest(page=page):
+				self.assertEqual(self._page_roles(page), roles)
+
+	def _holders(self, doctype, right):
+		"""The roles that hold a right on a doctype.
+
+		The app's own doctype is read from its JSON, the rights the app ships;
+		a site that has not migrated yet still has the old ones. ERPNext's
+		doctypes are read from the meta, because their rights are ERPNext's.
+		"""
+		if doctype == "TaxJar Settings":
+			rows = self._json("doctype", "taxjar_settings", "taxjar_settings.json")["permissions"]
+			return {row["role"] for row in rows if row.get(right)}
+		return {
+			perm.role for perm in frappe.get_meta(doctype).permissions
+			if perm.permlevel == 0 and perm.get(right)
+		}
+
+	def test_every_page_role_can_read_what_the_page_shows(self):
+		"""System Manager has no Sales Invoice or Customer rights in ERPNext, so
+		it is not on the Transactions or Customers page."""
+		for page, (doctype, right) in self.DATA.items():
+			with self.subTest(page=page):
+				self.assertLessEqual(self._page_roles(page), self._holders(doctype, right))
+
+	def test_the_workspace_shows_to_the_page_roles_only(self):
+		"""An empty roles table shows the workspace to every desk user, with
+		links into pages that then refuse them."""
+		workspace = self._json("workspace", "taxjar_integration", "taxjar_integration.json")
+		self.assertEqual(
+			{row["role"] for row in workspace["roles"]},
+			set().union(*self.PAGES.values()),
+		)
+		self.assertEqual(workspace["public"], 1)
+
+
+class TestNexusPageIsReadOnlyForATaxJarUser(UnitTestCase):
+	"""A TaxJar User reads the Nexus page. Only a TaxJar Manager syncs it."""
+
+	MOD = "taxjar_integration.taxjar_integration.page.taxjar_nexus.taxjar_nexus"
+
+	def _settings(self):
+		settings = MagicMock(nexus=[], nexus_last_synced=None)
+		settings.get_product_tax_category_summary.return_value = {}
+		return settings
+
+	def _as(self, write):
+		return lambda doctype, ptype="read", *args, **kwargs: ptype == "read" or write
+
+	def test_the_summary_says_whether_the_reader_may_sync(self):
+		from taxjar_integration.taxjar_integration.page.taxjar_nexus import taxjar_nexus
+
+		for write in (True, False):
+			with self.subTest(write=write):
+				with patch.object(taxjar_nexus.frappe, "has_permission", side_effect=self._as(write)), \
+				     patch.object(taxjar_nexus.frappe, "get_single", return_value=self._settings()):
+					self.assertIs(taxjar_nexus.get_summary()["can_sync"], write)
+
+	def test_a_reader_cannot_start_either_sync(self):
+		"""Refused at the endpoint, before the settings are even loaded."""
+		from taxjar_integration.taxjar_integration.page.taxjar_nexus import taxjar_nexus
+
+		for endpoint in (taxjar_nexus.update_nexus_list, taxjar_nexus.refresh_product_tax_categories):
+			with self.subTest(endpoint=endpoint.__name__):
+				with patch.object(taxjar_nexus.frappe, "get_single") as get_single:
+					frappe.set_user("Guest")
+					try:
+						with self.assertRaises(frappe.PermissionError):
+							endpoint()
+					finally:
+						frappe.set_user("Administrator")
+				get_single.assert_not_called()
+
+	def test_the_page_draws_the_sync_buttons_only_for_a_manager(self):
+		import os
+
+		path = os.path.join(os.path.dirname(__file__), "..", "..", "page", "taxjar_nexus", "taxjar_nexus.js")
+		with open(path) as handle:
+			js = handle.read()
+		self.assertIn("this.can_sync = !!summary.can_sync;", js)
+		self.assertIn("if (!this.can_sync) return $controls;", js)

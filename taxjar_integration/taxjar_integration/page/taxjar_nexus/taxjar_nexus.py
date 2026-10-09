@@ -6,6 +6,10 @@ settings form. Every write here delegates to the doctype's own method, which
 already carries the write-permission check, the TaxJar call and the save - so
 this module never re-implements either fetch, and the two entry points can
 never drift apart.
+
+A TaxJar User (read on TaxJar Settings) opens this page read-only. Only a
+TaxJar Manager (write) syncs either list, so each sync endpoint checks write
+itself, before it loads anything.
 """
 
 import frappe
@@ -30,6 +34,8 @@ def _summary(settings):
 		],
 		"nexus_last_synced": settings.nexus_last_synced,
 		"product_tax_categories": settings.get_product_tax_category_summary(),
+		# The page draws the two sync buttons only when this is true.
+		"can_sync": bool(frappe.has_permission(SETTINGS, "write")),
 	}
 
 
@@ -45,6 +51,7 @@ def update_nexus_list():
 	"""The page's "Update Nexus List" button. update_nexus_list() checks write
 	permission itself and saves, so the reloaded summary below reflects what
 	TaxJar just returned."""
+	frappe.has_permission(SETTINGS, "write", throw=True)
 	settings = frappe.get_single(SETTINGS)
 	settings.update_nexus_list()
 
@@ -56,6 +63,7 @@ def refresh_product_tax_categories():
 	"""The page's "Update Product Tax Category List" button. Same delegation as
 	update_nexus_list above - the doctype method checks write permission and
 	turns a TaxJar error into a readable message."""
+	frappe.has_permission(SETTINGS, "write", throw=True)
 	settings = frappe.get_single(SETTINGS)
 	settings.refresh_product_tax_categories()
 
