@@ -24173,3 +24173,104 @@ class TestNexusPageIsReadOnlyForATaxJarUser(UnitTestCase):
 			js = handle.read()
 		self.assertIn("this.can_sync = !!summary.can_sync;", js)
 		self.assertIn("if (!this.can_sync) return $controls;", js)
+
+
+# ── The tax breakdown always prints ──────────────────────────────────────────
+
+
+class TestTaxBreakdownAlwaysPrints(UnitTestCase):
+	"""The US Sales Tax Invoice prints its jurisdiction table with no setting.
+
+	It used to read "Show Detailed TaxJar Tax Breakdown" from Print Settings.
+	The table is the reason the format exists, so it now always prints when
+	TaxJar charged tax. Rendered from the template file itself, the same way as
+	the Rate and Discount tests.
+	"""
+
+	SET_BLOCK = re.compile(
+		r"\{%\s*set is_zero_tax = .*?%\}.*?\{%\s*set is_card = .*?%\}",
+		re.S,
+	)
+
+	def _html(self):
+		import os
+
+		path = os.path.normpath(os.path.join(
+			os.path.dirname(__file__), "..", "..",
+			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+		))
+		with open(path) as handle:
+			return handle.read()
+
+	def _printed(self, has_nexus=1, has_tax_data=True, zero_tax_reason=None, is_exempt=False, is_export=False):
+		block = self.SET_BLOCK.search(self._html())
+		self.assertIsNotNone(block, "the template no longer sets is_zero_tax ... is_card")
+		rendered = frappe.render_template(
+			block.group(0) + "{{ show_breakdown_table }}|{{ show_no_tax_message }}",
+			{
+				"doc": frappe._dict(taxjar_has_nexus=has_nexus),
+				"tj": frappe._dict(zero_tax_reason=zero_tax_reason),
+				"has_tax_data": has_tax_data,
+				"is_exempt": is_exempt,
+				"is_export": is_export,
+				# What a site that cleared the old setting still holds.
+				"print_settings": frappe._dict(taxjar_show_tax_breakdown=0),
+			},
+		)
+		table, message = rendered.strip().split("|")
+		return table == "True", message == "True"
+
+	def test_the_table_prints_when_taxjar_charged_tax(self):
+		self.assertEqual(self._printed(), (True, False))
+
+	def test_no_tax_prints_the_message_in_place_of_the_table(self):
+		self.assertEqual(self._printed(zero_tax_reason="Rate is 0"), (False, True))
+
+	def test_no_nexus_and_no_tax_data_prints_neither(self):
+		self.assertEqual(self._printed(has_nexus=0, has_tax_data=False), (False, False))
+
+	def test_the_template_reads_no_print_setting_for_it(self):
+		self.assertNotIn("taxjar_show_tax_breakdown", self._html())
+
+	def test_the_app_adds_no_print_settings_field(self):
+		from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
+			get_custom_fields,
+		)
+
+		self.assertNotIn("Print Settings", get_custom_fields())
+
+
+class TestRemoveTaxBreakdownPrintSetting(UnitTestCase):
+	"""The patch that removes the old Print Settings field from upgraded sites."""
+
+	MOD = "taxjar_integration.patches.remove_tax_breakdown_print_setting"
+
+	def test_it_deletes_the_field_and_its_stored_value(self):
+		from taxjar_integration.patches import remove_tax_breakdown_print_setting as patch_module
+
+		with patch.object(patch_module.frappe, "delete_doc") as delete_doc, \
+		     patch.object(patch_module.frappe.db, "delete") as db_delete, \
+		     patch.object(patch_module.frappe, "clear_cache") as clear_cache:
+			patch_module.execute()
+
+		delete_doc.assert_called_once_with(
+			"Custom Field", "Print Settings-taxjar_show_tax_breakdown", ignore_missing=True
+		)
+		db_delete.assert_called_once_with(
+			"Singles", {"doctype": "Print Settings", "field": "taxjar_show_tax_breakdown"}
+		)
+		clear_cache.assert_called_once_with(doctype="Print Settings")
+
+	def test_it_runs_before_the_marker_is_cleared(self):
+		import os
+
+		import taxjar_integration
+
+		path = os.path.join(os.path.dirname(taxjar_integration.__file__), "patches.txt")
+		with open(path) as handle:
+			lines = [line.strip() for line in handle if line.strip()]
+		self.assertIn(self.MOD, lines)
+		self.assertLess(
+			lines.index(self.MOD),
+			lines.index("taxjar_integration.patches.clear_version_15_upgrade_marker"),
+		)

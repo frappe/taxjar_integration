@@ -1162,27 +1162,6 @@ def get_custom_fields():
 				no_copy=1,
 			),
 		],
-		# Print-time toggle for the "US Sales Tax Invoice" print format's
-		# jurisdiction-by-jurisdiction breakdown table. Lives on Print Settings
-		# rather than as a field on Sales Invoice itself, same convention
-		# erpnext's own compact_item_print/print_taxes_with_zero_amount use
-		# (erpnext.setup.install.create_print_setting_custom_fields) - it is a
-		# print-run preference, not document data, and this way it shows up in
-		# the print preview's Settings sidebar for free, with no client script.
-		"Print Settings": [
-			dict(
-				fieldname="taxjar_show_tax_breakdown",
-				fieldtype="Check",
-				insert_after="print_taxes_with_zero_amount",
-				label="Show Detailed TaxJar Tax Breakdown",
-				default="1",
-				description=(
-					"Applies to print formats built for TaxJar, such as the US "
-					"Sales Tax Invoice - includes the jurisdiction-by-jurisdiction "
-					"tax breakdown table."
-				),
-			),
-		],
 	}
 
 
@@ -1193,45 +1172,6 @@ def make_custom_fields(update=True):
 		"Sales Invoice", "return_against", "no_copy", "0", "Check",
 		for_doctype=False,
 	)
-
-	_backfill_print_settings_defaults()
-
-
-def _backfill_print_settings_defaults():
-	"""A Check custom field's `default` only applies to a document created
-	fresh via .new_doc() - Print Settings is a Single that already exists on
-	every site (frappe creates it at site creation, long before this app is
-	installed), so create_custom_fields() alone leaves
-	taxjar_show_tax_breakdown reading back as unchecked forever, silently
-	contradicting its declared default="1".
-
-	Checked by reading the Singles row itself, not by get_single_value() - for
-	a Check field, cast_fieldtype() maps a missing row to 0 the same as an
-	explicit 0, so get_single_value() can never tell "never set" apart from
-	"someone unchecked it", and using it here would re-assert 1 over that
-	choice on every migrate. Only the row itself tells the two apart, so this
-	backfills the very first time only and leaves any later value alone.
-
-	Read with frappe.qb, which sends the SELECT as written. db.exists() and
-	db.get_value() cannot stand in: both go through the query engine, which
-	orders by `creation` by default, and Singles carries no such column.
-	Confirmed against this site - each one raises (1054) Unknown column
-	'creation' in 'ORDER BY'.
-	"""
-	singles = frappe.qb.DocType("Singles")
-	row_exists = (
-		frappe.qb.from_(singles)
-		# Subscripts, not attributes: pypika's Table already defines a field()
-		# method, so `singles.field` hands back that method rather than the
-		# column of the same name, and the WHERE clause silently goes wrong.
-		.select(singles["value"])
-		.where(singles["doctype"] == "Print Settings")
-		.where(singles["field"] == "taxjar_show_tax_breakdown")
-		.limit(1)
-	).run()
-
-	if not row_exists:
-		frappe.db.set_single_value("Print Settings", "taxjar_show_tax_breakdown", 1)
 
 
 _EXEMPT_FROM_SALES_TAX_DOCTYPES = ("Quotation", "Sales Order", "Sales Invoice", "Customer")

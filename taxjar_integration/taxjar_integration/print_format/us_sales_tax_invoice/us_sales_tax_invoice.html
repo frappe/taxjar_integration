@@ -294,7 +294,7 @@
 			An exemption is 0 tax by definition, even before a calculation.
 		#}
 		{% set is_zero_tax = (not doc.taxjar_has_nexus) or is_exempt or tj.zero_tax_reason %}
-		{% set show_tax_analysis = print_settings.taxjar_show_tax_breakdown and (doc.taxjar_has_nexus or has_tax_data) %}
+		{% set show_tax_analysis = doc.taxjar_has_nexus or has_tax_data %}
 		{% set show_breakdown_table = show_tax_analysis and not is_zero_tax %}
 		{% set show_no_tax_message = show_tax_analysis and is_zero_tax and not is_export and not is_exempt %}
 		{% set no_tax_message = _("Taxes are not applicable") %}
