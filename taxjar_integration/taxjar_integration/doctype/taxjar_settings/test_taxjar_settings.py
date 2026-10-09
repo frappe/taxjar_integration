@@ -24274,3 +24274,59 @@ class TestRemoveTaxBreakdownPrintSetting(UnitTestCase):
 			lines.index(self.MOD),
 			lines.index("taxjar_integration.patches.clear_version_15_upgrade_marker"),
 		)
+
+
+# ── A charge prints its description only ─────────────────────────────────────
+
+
+class TestChargeRowsPrintTheirDescriptionOnly(UnitTestCase):
+	"""An extra charge in the US Sales Tax Invoice totals prints one line.
+
+	It used to print the ledger under the description as well. ERPNext fills a
+	charge's description with the account name, so the two lines said the same
+	thing: "Interest Income:" over "71000 - Interest Income". Rendered from
+	the template file's own totals loop.
+	"""
+
+	ROW_LOOP = re.compile(r"\{%-\s*for tax in ad_hoc_rows \+ shipping_rows.*?\{%-\s*endfor\s*-%\}", re.S)
+
+	def _html(self):
+		import os
+
+		path = os.path.normpath(os.path.join(
+			os.path.dirname(__file__), "..", "..",
+			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+		))
+		with open(path) as handle:
+			return handle.read()
+
+	def _row(self, account_head, description):
+		row = frappe._dict(account_head=account_head, description=description, tax_amount=25)
+		row.get_formatted = lambda fieldname, doc=None: "$25.00"
+		return row
+
+	def _printed(self, ad_hoc=(), shipping=()):
+		loop = self.ROW_LOOP.search(self._html())
+		self.assertIsNotNone(loop, "the totals no longer loop over ad_hoc_rows + shipping_rows")
+		return frappe.render_template(loop.group(0), {
+			"ad_hoc_rows": list(ad_hoc), "shipping_rows": list(shipping), "tax_rows": [], "other_rows": [],
+			"shipping_head": "Freight - FI",
+			"company_abbr": "FI",
+			"doc": frappe._dict(taxjar_freight_taxable=1),
+		})
+
+	def test_a_charge_prints_its_description_and_not_its_ledger(self):
+		html = self._printed(ad_hoc=[self._row("71000 - Interest Income - FI", "Interest Income")])
+		self.assertIn("Interest Income:", html)
+		self.assertNotIn("71000", html)
+
+	def test_a_custom_description_prints_alone_too(self):
+		html = self._printed(ad_hoc=[self._row("71000 - Interest Income - FI", "Late payment fee")])
+		self.assertIn("Late payment fee:", html)
+		self.assertNotIn("Interest Income", html)
+
+	def test_the_shipping_row_keeps_its_taxable_note(self):
+		"""Whether freight is taxed is a tax fact, not the ledger, so it stays."""
+		html = self._printed(shipping=[self._row("Freight - FI", "Shipping & Forwarding Charges")])
+		self.assertIn("Shipping & Forwarding:", html)
+		self.assertIn("Taxable", html)

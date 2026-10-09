@@ -27,7 +27,6 @@
 {% set company_config = get_company_config(doc.company) %}
 {% set shipping_head = company_config.shipping_account_head if company_config else None %}
 {% set tax_head = company_config.tax_account_head if company_config else None %}
-{% set company_abbr = frappe.db.get_value("Company", doc.company, "abbr") %}
 {#
 	Mirrors the precedence check_for_nexus()/set_sales_tax() already apply
 	when filling these fields in (taxjar_integration.py). Gated on
@@ -375,22 +374,18 @@
 				{% endfor %}
 				{%- for tax in ad_hoc_rows + shipping_rows + tax_rows + other_rows -%}
 					{% set is_shipping_row = shipping_head and tax.account_head == shipping_head %}
-					{% set is_ad_hoc_row = tax in ad_hoc_rows %}
-					{#
-						Ledger name, company abbreviation dropped - Frappe
-						Account names are always "{name} - {company_abbr}",
-						so this is a plain suffix strip, not a lookup.
-					#}
-					{% set abbr_suffix = " - " ~ company_abbr if company_abbr else None %}
-					{% set ledger_name = tax.account_head[:-(abbr_suffix|length)] if abbr_suffix and tax.account_head and tax.account_head.endswith(abbr_suffix) else tax.account_head %}
 					<tr class="row-divider">
 						<td class="text-right title" style="padding-right: 12px !important;">
 							{# "Shipping & Forwarding Charges" -> "Shipping & Forwarding" - the row already reads as a charge from context (it's in the totals table), so the trailing word is dropped rather than repeated. #}
 							{{ tax.description[:-8] if is_shipping_row and tax.description.endswith(" Charges") else tax.description }}:
+							{#
+								A charge prints its description only. ERPNext fills the
+								description with the account name, so a ledger line under
+								it said the same thing twice. Shipping keeps its note: whether
+								freight is taxed is a tax fact, not the ledger.
+							#}
 							{% if is_shipping_row %}
 							<span class="taxjar-line-note">{{ _("Taxable") if doc.taxjar_freight_taxable else _("Not taxable") }}</span>
-							{% elif is_ad_hoc_row and ledger_name %}
-							<span class="taxjar-line-note">{{ ledger_name }}</span>
 							{% endif %}
 						</td>
 						<td class="text-right">{{ tax.get_formatted("tax_amount", doc) }}</td>
