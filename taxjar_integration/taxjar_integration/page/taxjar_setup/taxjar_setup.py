@@ -84,10 +84,15 @@ def get_setup_state():
 	mode = "Live" if is_unconfigured else (settings.api_mode or "Live")
 	token_field = "sandbox_token" if mode == "Sandbox" else "live_token"
 
+	# Read on TaxJar Settings is what makes a TaxJar User, who never replaces a
+	# token. The last 4 characters are there for the Manager who does, so a
+	# reader gets none and the token is not even decrypted for them.
+	can_manage = frappe.has_permission(SETTINGS, "write")
+
 	credentials = [
 		{
 			"company": cred.company,
-			"token_last4": _token_last4(cred, token_field),
+			"token_last4": _token_last4(cred, token_field) if can_manage else None,
 		}
 		for cred in (settings.table_hvjw or [])
 		if cred.company

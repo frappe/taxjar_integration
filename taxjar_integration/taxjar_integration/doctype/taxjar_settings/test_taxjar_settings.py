@@ -14562,6 +14562,20 @@ class TestGuidedSetupState(UnitTestCase):
 		self.assertEqual(captured["field"], "live_token")
 		self.assertEqual(state["credentials"][0]["token_last4"], "5678")
 
+	def test_a_reader_who_cannot_change_the_settings_sees_no_token_hint(self):
+		"""Read on TaxJar Settings makes a TaxJar User, who never manages tokens.
+		The last 4 characters help only the Manager who replaces one."""
+		from taxjar_integration.taxjar_integration.page.taxjar_setup.taxjar_setup import get_setup_state
+		s = self._settings()
+		with patch(_SETUP_MODULE + ".frappe.has_permission", side_effect=lambda doctype, ptype="read", **kw: ptype == "read"), \
+		     patch(_SETUP_MODULE + ".frappe.get_single", return_value=s), \
+		     patch(_SETUP_MODULE + ".get_decrypted_password", return_value="tok-abcd1234") as decrypt:
+			state = get_setup_state()
+
+		self.assertIsNone(state["credentials"][0]["token_last4"])
+		self.assertEqual(state["credentials"][0]["company"], "Frappe Tech")
+		decrypt.assert_not_called()
+
 	def test_token_last4_none_when_no_token(self):
 		from taxjar_integration.taxjar_integration.page.taxjar_setup.taxjar_setup import get_setup_state
 		s = self._settings()
