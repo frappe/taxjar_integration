@@ -21,7 +21,7 @@ from erpnext import get_region
 from erpnext.setup.utils import get_exchange_rate
 
 from taxjar_integration.taxjar_integration.access import require_permission
-from taxjar_integration.taxjar_integration.telemetry import (
+from taxjar_integration.telemetry import (
 	capture,
 	capture_once,
 	count_api_call,

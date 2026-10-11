@@ -6,10 +6,10 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, today
 
-from taxjar_integration.taxjar_integration import csat
+from taxjar_integration.telemetry import csat
 
 USER = "csat-test-user@example.com"
-MODULE = "taxjar_integration.taxjar_integration.csat"
+MODULE = "taxjar_integration.telemetry.csat"
 
 
 class TestCsatSurvey(IntegrationTestCase):

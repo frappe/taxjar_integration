@@ -26,7 +26,7 @@ from taxjar_integration.taxjar_integration.regional.united_states import (
 	_US_DEFAULT_TEMPLATE_TITLES,
 	TAXJAR_TEMPLATE_TITLE,
 )
-from taxjar_integration.taxjar_integration.telemetry import capture
+from taxjar_integration.telemetry import capture
 
 # Every Property Setter make_custom_fields() and its two helpers create, as
 # (doctype, fieldname, property). Deleting a Property Setter reverts the field

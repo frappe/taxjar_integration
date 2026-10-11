@@ -212,7 +212,7 @@ scheduler_events = {
 	],
 	# The long queue, so the snapshot's count queries never delay short jobs.
 	"daily_long": [
-		"taxjar_integration.taxjar_integration.feature_state.capture_feature_state",
+		"taxjar_integration.telemetry.feature_state.capture_feature_state",
 	],
 	"weekly": [
 		"taxjar_integration.taxjar_integration.tasks.sync_product_tax_categories",

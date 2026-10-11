@@ -6,11 +6,12 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
 
-from taxjar_integration.taxjar_integration import feature_state, telemetry
-from taxjar_integration.taxjar_integration.telemetry_events import BROWSER_EVENTS, EVENTS
+from taxjar_integration import telemetry
+from taxjar_integration.telemetry import feature_state
+from taxjar_integration.telemetry.events import BROWSER_EVENTS, EVENTS
 
 APP = Path(frappe.get_app_path("taxjar_integration"))
-TELEMETRY = "taxjar_integration.taxjar_integration.telemetry"
+TELEMETRY = "taxjar_integration.telemetry"
 
 # capture("x"), capture_once("x") and capture_for_user("x") in Python;
 # taxjar_integration.track("x") in JavaScript.
@@ -46,7 +47,7 @@ class TestEventWiring(UnitTestCase):
 	def test_no_event_carries_a_user_id(self):
 		"""All events are site-level. capture_for_user exists, but nothing uses it yet."""
 		for path in APP.rglob("*.py"):
-			if path.name == "telemetry.py" or path.name.startswith("test_"):
+			if path == APP / "telemetry" / "__init__.py" or path.name.startswith("test_"):
 				continue
 			with self.subTest(file=path.name):
 				self.assertNotIn("capture_for_user(", path.read_text())

@@ -8,7 +8,7 @@ Frappe does not hash into an ID. `capture_for_user` sends the pseudonymous ID of
 the session user. The CSAT survey must use `capture` only, because it tells
 users that their feedback is anonymous.
 
-Each property must be in EVENTS (telemetry_events.py) with an allowed value or
+Each property must be in EVENTS (events.py) with an allowed value or
 type. The capture drops all other properties, so names and amounts cannot
 reach Pulse. Telemetry never raises: a failure here must not stop a user's work.
 """
@@ -19,7 +19,7 @@ from frappe.utils import date_diff, get_app_version, getdate, today
 from frappe.utils.telemetry import capture as frappe_capture
 from frappe.utils.telemetry import is_pulse_enabled
 
-from taxjar_integration.taxjar_integration.telemetry_events import (
+from taxjar_integration.telemetry.events import (
 	API_CALL_TYPES,
 	BROWSER_EVENTS,
 	COMMON,

@@ -71,7 +71,7 @@ from taxjar_integration.taxjar_integration.regional.united_states import (
 # so a Property Setter added to install later cannot reach one of the paths that undo it
 # and miss the other.
 from taxjar_integration.uninstall import _PROPERTY_SETTERS, restore_default_tax_templates
-from taxjar_integration.taxjar_integration.telemetry import capture
+from taxjar_integration.telemetry import capture
 
 
 def before_disable():

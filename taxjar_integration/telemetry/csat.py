@@ -20,7 +20,7 @@ from frappe.utils import add_days, cint, getdate, today
 from frappe.utils.telemetry import is_pulse_enabled
 
 from taxjar_integration.taxjar_integration.taxjar_integration import _is_taxjar_enabled
-from taxjar_integration.taxjar_integration.telemetry import SCORES, capture
+from taxjar_integration.telemetry import SCORES, capture
 
 SURVEY = "csat"
 

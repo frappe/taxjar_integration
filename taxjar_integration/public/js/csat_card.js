@@ -1,13 +1,13 @@
 // The CSAT survey card in the TaxJar sidebar, and the dialog that it opens.
 //
 // The server decides when to ask, keeps the survey state, and sends the answer
-// to Pulse (taxjar_integration/taxjar_integration/csat.py). This file only shows
+// to Pulse (taxjar_integration/telemetry/csat.py). This file only shows
 // the card and the dialog. It keeps no state in localStorage.
 if (!window.taxjar_integration) {
 	window.taxjar_integration = {};
 }
 
-const CSAT_METHOD = "taxjar_integration.taxjar_integration.csat";
+const CSAT_METHOD = "taxjar_integration.telemetry.csat";
 const CSAT_CARD_CLASS = "taxjar-csat-card";
 
 class TaxJarCsat {

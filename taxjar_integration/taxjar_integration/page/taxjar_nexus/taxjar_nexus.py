@@ -15,7 +15,7 @@ itself, before it loads anything.
 import frappe
 
 from taxjar_integration.taxjar_integration.access import require_permission
-from taxjar_integration.taxjar_integration.telemetry import capture
+from taxjar_integration.telemetry import capture
 
 SETTINGS = "TaxJar Settings"
 

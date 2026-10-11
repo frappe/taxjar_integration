@@ -39,7 +39,7 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_validate_address_with_taxjar,
 	company_address_names,
 )
-from taxjar_integration.taxjar_integration.telemetry import (
+from taxjar_integration.telemetry import (
 	capture,
 	capture_once,
 	record_setup_finished,

@@ -3,9 +3,9 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from taxjar_integration.taxjar_integration import telemetry
+from taxjar_integration import telemetry
 
-FRAPPE_CAPTURE = "taxjar_integration.taxjar_integration.telemetry.frappe_capture"
+FRAPPE_CAPTURE = "taxjar_integration.telemetry.frappe_capture"
 
 
 class TestTelemetry(IntegrationTestCase):

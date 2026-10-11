@@ -20,7 +20,7 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_publish_transaction_update,
 	transaction_exclusion_reason,
 )
-from taxjar_integration.taxjar_integration.telemetry import capture
+from taxjar_integration.telemetry import capture
 
 # A representative TaxJar custom field; if this column is absent the fields were
 # never created, so reads would hit MySQLdb (1054) Unknown column.

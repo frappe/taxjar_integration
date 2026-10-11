@@ -2,7 +2,7 @@
 
 One taxjar_feature_state event per site per day, run by the daily_long
 scheduler. Counts only: no names, amounts or addresses (see FEATURE_STATE in
-telemetry_events.py for what each property may hold).
+events.py for what each property may hold).
 
 Each count over a time window filters on `creation`, which has an index, so it
 reads only the rows of that window. `modified` and `taxjar_last_synced` have no
@@ -13,7 +13,7 @@ import frappe
 from frappe.utils import add_days, cint, now_datetime
 from frappe.utils.telemetry import is_pulse_enabled
 
-from taxjar_integration.taxjar_integration.telemetry import (
+from taxjar_integration.telemetry import (
 	capture,
 	days_since_setup,
 	take_api_call_counts,
