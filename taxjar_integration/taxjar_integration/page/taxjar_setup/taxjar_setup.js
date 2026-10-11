@@ -1446,11 +1446,10 @@ class TaxJarSetup {
 	// A gate, by the product decision recorded in _sync_address_gate: an
 	// address TaxJar rejects holds Continue until it is fixed.
 	//
-	// It was advisory before. verify_address_with_taxjar()'s own docstring says
-	// TaxJar fails to match addresses a user may have entered correctly, which
-	// is why that call left Address.validate - so a rejected address that is in
-	// fact correct now stops this wizard, and the way past it is to edit the
-	// address until TaxJar matches it.
+	// It was advisory before. TaxJar fails to match some addresses a user
+	// entered correctly, which is why the TaxJar check left Address.validate -
+	// so a rejected address that is in fact correct now stops this wizard, and
+	// the way past it is to edit the address until TaxJar matches it.
 	//
 	// The three outcomes stay as they were. Only a checked-and-rejected one
 	// sets verifyError, which is the single thing the gate reads.

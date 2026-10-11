@@ -367,6 +367,9 @@ class TaxJarNotConfiguredError(frappe.ValidationError):
 # render through.
 EXCLUSION_TAXJAR_DISABLED = "TaxJar Disabled"
 EXCLUSION_SYNC_NOT_ENABLED = "Transaction Sync not enabled for company"
+# Nothing sets this one now: it came from an endpoint that removed a transaction
+# from TaxJar by hand, and that endpoint is gone. It stays an option so that an
+# invoice already holding it still reads and saves.
 EXCLUSION_REMOVED_FROM_TAXJAR = "Removed from TaxJar"
 # An export, kept out by its company's own choice. TaxJar prices United States
 # sales tax, so an export is taxed at zero either way; whether it is still filed
@@ -898,97 +901,6 @@ def _record_sync_failure(err, action, payload, ctx, invoice_name):
 	if info["kind"] == "unknown":
 		_get_taxjar_logger().error(info["log_detail"])
 	_set_sync_status(invoice_name, "Failed", error=info["message"], retryable=info["retryable"])
-
-
-@frappe.whitelist()
-def fetch_transaction_from_taxjar(invoice_name: str):
-	"""Pull current transaction state from TaxJar and return the response data."""
-	require_permission("Sales Invoice", "read", doc=invoice_name)
-
-	doc = frappe.get_doc("Sales Invoice", invoice_name)
-	client = get_client(doc.company)
-	if not client:
-		frappe.throw(
-			_("TaxJar client is not configured for company {0}").format(doc.company),
-			title=_("TaxJar Not Configured"),
-		)
-
-	ctx = {"doctype": "Sales Invoice", "name": invoice_name}
-
-	provider_params = PROVIDER_PARAMS
-
-	try:
-		if doc.is_return:
-			log_taxjar_call(action="show_refund", status="request", context=ctx)
-			response = client.show_refund(doc.name, params=provider_params)
-			log_taxjar_call(action="show_refund", status="success", response=response, context=ctx)
-		else:
-			log_taxjar_call(action="show_order", status="request", context=ctx)
-			response = client.show_order(doc.name, params=provider_params)
-			log_taxjar_call(action="show_order", status="success", response=response, context=ctx)
-		return _taxjar_response_payload(response)
-	except taxjar.exceptions.TaxJarResponseError as err:
-		full = getattr(err, "full_response", {}) or {}
-		status_code = full.get("status_code") if isinstance(full, dict) else None
-		log_taxjar_call(action="show_transaction", status="error", error=getattr(err, "full_response", str(err)), context=ctx)
-		if status_code == 404:
-			frappe.throw(
-				_("Transaction {0} was not found in TaxJar. It may have been created in a different API mode (Sandbox/Live) "
-				  "or may not have been synced yet.").format(invoice_name),
-				title=_("Transaction Not Found in TaxJar"),
-			)
-		frappe.throw(
-			_linkify_guided_setup(_("Failed to fetch from TaxJar: {0}").format(sanitize_error_response(err))),
-			title=_("TaxJar Fetch Failed"),
-		)
-	except taxjar.exceptions.TaxJarConnectionError:
-		log_taxjar_call(action="show_transaction", status="error", error="TaxJar API is unreachable", context=ctx)
-		frappe.throw(
-			_("TaxJar API is unreachable. Please try again later."),
-			title=_("TaxJar Unreachable"),
-		)
-	except Exception as e:
-		log_taxjar_call(action="show_transaction", status="error", error=str(e), context=ctx)
-		frappe.throw(
-			_("Failed to fetch from TaxJar: {0}").format(str(e)),
-			title=_("TaxJar Fetch Failed"),
-		)
-
-
-@frappe.whitelist(methods=["POST"])
-def delete_transaction_manual(invoice_name: str):
-	"""Manual deletion of a transaction from TaxJar (for cleanup)."""
-	require_permission("Sales Invoice", "write", doc=invoice_name)
-
-	doc = frappe.get_doc("Sales Invoice", invoice_name)
-	client = get_client(doc.company)
-	if not client:
-		frappe.throw(
-			_("TaxJar client is not configured for company {0}").format(doc.company),
-			title=_("TaxJar Not Configured"),
-		)
-
-	ctx = {"doctype": "Sales Invoice", "name": invoice_name}
-	is_refund = doc.is_return
-	action = "delete_refund" if is_refund else "delete_order"
-
-	provider_params = PROVIDER_PARAMS
-
-	try:
-		log_taxjar_call(action=action, status="request", payload={"transaction_id": doc.name}, context=ctx)
-		if is_refund:
-			response = client.delete_refund(doc.name, params=provider_params)
-		else:
-			response = client.delete_order(doc.name, params=provider_params)
-		log_taxjar_call(action=action, status="success", response=response, context=ctx)
-		_set_sync_status(invoice_name, "Excluded", exclusion_reason=EXCLUSION_REMOVED_FROM_TAXJAR)
-		return {"success": True}
-	except Exception as e:
-		log_taxjar_call(action=action, status="error", error=str(e), context=ctx)
-		frappe.throw(
-			_("Failed to delete from TaxJar: {0}").format(str(e)),
-			title=_("TaxJar Delete Failed"),
-		)
 
 
 def _get_transaction_date(doc):
@@ -3314,29 +3226,6 @@ def get_company_scope(company: str):
 	}
 
 
-@frappe.whitelist()
-def verify_address_with_taxjar(address_name: str, company: str):
-	"""Ask TaxJar whether it can find this address in the real world.
-
-	An explicit, non-blocking check that returns a verdict, rather than what it
-	was: an outbound HTTP call inside Address.validate, on a credential picked by
-	row order, that failed a save whenever TaxJar could not match an address the
-	user may well have entered correctly from a source TaxJar does not know.
-
-	Nothing calls this from the UI yet - offering it as an action on the address
-	or transaction form is follow-up work. It is kept, and kept callable, because
-	the check itself is useful; it was where and how it ran that was wrong.
-	"""
-	require_permission("Address", "read", doc=address_name)
-	require_permission("Company", "read", doc=company)
-
-	if not company_scope(company).uses_taxjar:
-		return {"checked": False, "reason": "out_of_scope"}
-
-	doc = frappe.get_doc("Address", address_name)
-	return _validate_address_with_taxjar(doc, company)
-
-
 def _validate_address_with_taxjar(doc, company):
 	"""Call TaxJar's address validation endpoint for US addresses.
 
@@ -3872,8 +3761,7 @@ def resync_customer(customer_name: str, company: str):
 	"""
 	require_permission("Customer", "write", doc=customer_name)
 	# The company is named by the caller, so it is checked like any other
-	# argument, the same as in verify_address_with_taxjar() and
-	# get_company_scope().
+	# argument, the same as in get_company_scope().
 	require_permission("Company", "read", doc=company)
 
 	if company not in customer_sync_companies(customer_name):

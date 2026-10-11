@@ -49,10 +49,8 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	classify_taxjar_error,
 	delete_customer_from_taxjar,
 	delete_transaction_from_taxjar,
-	delete_transaction_manual,
 	enqueue_taxjar_delete,
 	enqueue_taxjar_sync,
-	fetch_transaction_from_taxjar,
 	get_company_config,
 	get_line_item_dict,
 	get_taxjar_breakdown_html,
@@ -6985,17 +6983,6 @@ class TestDeskPageLifecycleJS(UnitTestCase):
 
 class TestExcludedRename(UnitTestCase):
 
-	def test_delete_marks_the_invoice_excluded(self):
-		"""Removing a transaction from TaxJar is exactly the excluded state."""
-		import inspect
-
-		from taxjar_integration.taxjar_integration.taxjar_integration import delete_transaction_manual
-
-		source = inspect.getsource(delete_transaction_manual)
-		self.assertIn('_set_sync_status(invoice_name, "Excluded"', source)
-		# ...and says why, like every other route into that status.
-		self.assertIn("exclusion_reason=EXCLUSION_REMOVED_FROM_TAXJAR", source)
-
 	def test_no_stale_not_applicable_status_value_in_source(self):
 		"""Guards the stored status, not the words.
 
@@ -8318,21 +8305,6 @@ class TestAddressValidationWithTaxJar(UnitTestCase):
 		client.validate_address.side_effect = err
 
 		self.assertEqual(self._check(client), {"checked": False, "reason": "error"})
-
-	def test_the_endpoint_refuses_a_company_taxjar_does_not_serve(self):
-		from taxjar_integration.taxjar_integration.taxjar_integration import (
-			verify_address_with_taxjar,
-		)
-
-		scope = MagicMock()
-		scope.uses_taxjar = False
-		with patch(f"{self.MOD}.frappe.has_permission"), \
-		     patch(f"{self.MOD}.company_scope", return_value=scope), \
-		     patch(f"{self.MOD}.frappe.get_doc") as mock_get:
-			result = verify_address_with_taxjar("ADDR-001", "India Co")
-
-		self.assertEqual(result, {"checked": False, "reason": "out_of_scope"})
-		mock_get.assert_not_called()
 
 	def test_address_validation_no_longer_runs_inside_a_save(self):
 		"""The finding: an outbound HTTP call inside a document's own validate,
@@ -15295,17 +15267,16 @@ class TestGuidedSetupVerifyCompanyAddress(UnitTestCase):
 	MODULE = _SETUP_MODULE
 
 	def test_does_not_gate_on_uses_taxjar(self):
-		"""The public verify_address_with_taxjar() gates on
-		company_scope().uses_taxjar - false by definition while this step runs,
-		since the Features step that turns a feature on comes after it. Wired to
-		that endpoint the button would answer "out_of_scope" on every first run,
-		so the wizard calls the shared implementation directly."""
+		"""A gate on company_scope().uses_taxjar would be false by definition
+		while this step runs, since the Features step that turns a feature on
+		comes after it. The button would answer "out_of_scope" on every first
+		run, so the wizard calls the shared implementation directly."""
 		from taxjar_integration.taxjar_integration.page.taxjar_setup import taxjar_setup
 
 		with patch(self.MODULE + ".frappe.has_permission"), \
 		     patch(self.MODULE + ".frappe.get_doc", return_value=MagicMock()), \
 		     patch(
-			     "taxjar_integration.taxjar_integration.taxjar_integration._validate_address_with_taxjar",
+			     self.MODULE + "._validate_address_with_taxjar",
 			     return_value={"checked": True, "valid": True},
 		     ) as validate:
 			res = taxjar_setup.verify_company_address(company="Frappe Tech", address="ADDR-1")
@@ -15322,7 +15293,7 @@ class TestGuidedSetupVerifyCompanyAddress(UnitTestCase):
 		with patch(self.MODULE + ".frappe.has_permission"), \
 		     patch(self.MODULE + ".frappe.get_doc", return_value=MagicMock()), \
 		     patch(
-			     "taxjar_integration.taxjar_integration.taxjar_integration._validate_address_with_taxjar",
+			     self.MODULE + "._validate_address_with_taxjar",
 			     return_value=None,
 		     ):
 			res = taxjar_setup.verify_company_address(company="Frappe Tech", address="ADDR-1")
@@ -18337,7 +18308,6 @@ class TestWhitelistedEndpointContract(UnitTestCase):
 		)
 		from taxjar_integration.taxjar_integration.taxjar_integration import (
 			create_customer_address,
-			delete_transaction_manual,
 			mark_address_as_shipping,
 		)
 
@@ -18345,7 +18315,7 @@ class TestWhitelistedEndpointContract(UnitTestCase):
 			test_connection, save_connection, save_company_accounts, save_features,
 			remove_company, fetch_nexus, finish_setup,
 			configure_exemption, bulk_clear_exemption, bulk_sync_to_taxjar,
-			bulk_retry, delete_transaction_manual, mark_address_as_shipping,
+			bulk_retry, mark_address_as_shipping,
 			create_customer_address,
 		)
 		for fn in writers:
@@ -18400,8 +18370,6 @@ class TestWhitelistedEndpointContract(UnitTestCase):
 
 		cases = (
 			(mod.resync_transaction, "write"),
-			(mod.fetch_transaction_from_taxjar, "read"),
-			(mod.delete_transaction_manual, "write"),
 		)
 		for fn, ptype in cases:
 			with patch.object(mod.frappe, "has_permission", side_effect=frappe.PermissionError) as guard:
@@ -23796,7 +23764,7 @@ class TestResyncButtonRespectsTheRestriction(UnitTestCase):
 
 class TestResyncButtonChecksTheCompanyItIsGiven(UnitTestCase):
 	"""The company argument is permission-checked, the same as in
-	verify_address_with_taxjar() and get_company_scope()."""
+	get_company_scope()."""
 
 	def test_the_company_is_permission_checked(self):
 		from taxjar_integration.taxjar_integration import taxjar_integration as mod
@@ -24499,3 +24467,31 @@ class TestPermissionRefusalLinksTheDocs(UnitTestCase):
 						if "has_permission(" in line and "throw=True" in line:
 							offenders.append(f"{name}:{number}")
 		self.assertEqual(offenders, [])
+
+
+# ── Endpoints nothing called are gone ────────────────────────────────────────
+
+
+class TestUncalledEndpointsAreGone(UnitTestCase):
+	"""Every whitelisted function can be called at /api/method/ by any logged-in
+	user, whether or not a screen calls it. These three had no caller:
+
+	- fetch_transaction_from_taxjar: nothing reads transactions back from TaxJar.
+	- delete_transaction_manual: deleted an order or refund in TaxJar while the
+	  invoice stayed submitted. Cancelling the invoice deletes it in TaxJar.
+	- verify_address_with_taxjar: TaxJar Setup verifies the company address
+	  through verify_company_address(), which needs write on TaxJar Settings.
+	"""
+
+	def test_they_no_longer_exist(self):
+		from taxjar_integration.taxjar_integration import taxjar_integration as mod
+
+		for name in ("fetch_transaction_from_taxjar", "delete_transaction_manual", "verify_address_with_taxjar"):
+			with self.subTest(name=name):
+				self.assertFalse(hasattr(mod, name))
+
+	def test_the_address_check_they_shared_stays(self):
+		"""verify_company_address() still uses it."""
+		from taxjar_integration.taxjar_integration import taxjar_integration as mod
+
+		self.assertTrue(callable(mod._validate_address_with_taxjar))

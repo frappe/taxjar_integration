@@ -35,7 +35,10 @@ from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	settings_write_lock,
 )
-from taxjar_integration.taxjar_integration.taxjar_integration import company_address_names
+from taxjar_integration.taxjar_integration.taxjar_integration import (
+	_validate_address_with_taxjar,
+	company_address_names,
+)
 
 SETTINGS = "TaxJar Settings"
 
@@ -536,12 +539,11 @@ def update_company_address(company: str, address: str, values: dict | str):
 def verify_company_address(company: str, address: str):
 	"""Ask TaxJar whether it can find this address, during setup.
 
-	Deliberately NOT the public verify_address_with_taxjar(), which gates on
-	company_scope(company).uses_taxjar - a condition that is false by definition
-	while this step runs, since the Features step that turns a feature on comes
-	after it. Wired to that endpoint, the button would answer "out_of_scope" on
-	every first run, which is the setup wizard reporting that setup is not
-	finished.
+	No gate on company_scope(company).uses_taxjar - a condition that is false by
+	definition while this step runs, since the Features step that turns a
+	feature on comes after it. With that gate, the button would answer
+	"out_of_scope" on every first run, which is the setup wizard reporting that
+	setup is not finished.
 
 	The gate here is the one that actually matters for the call: a credential for
 	this company, which the Connect step has already proven works. Both go
@@ -550,10 +552,6 @@ def verify_company_address(company: str, address: str):
 	"""
 	require_permission(SETTINGS, "write")
 	require_permission("Address", "read", doc=address)
-
-	from taxjar_integration.taxjar_integration.taxjar_integration import (
-		_validate_address_with_taxjar,
-	)
 
 	doc = frappe.get_doc("Address", address)
 	# Returns None when the company has no usable credential for the current API
