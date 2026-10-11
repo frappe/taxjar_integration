@@ -11,7 +11,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { install_desk, load_desk_sidebar } from "./helpers/desk.js";
 
-const SIDEBAR_TITLE = "taxjar integration";
+// The desk names a sidebar by its Workspace Sidebar record, in exact case
+// (sidebar.current_module). desk_sidebar.js reads the same name.
+const SIDEBAR_NAME = "TaxJar";
 const CLICK_STATE_KEY = "section-breaks-state";
 
 let frappe;
@@ -56,8 +58,8 @@ function make_group(label, { keep_closed = 1, collapsed = false, links = [] } = 
 	return group;
 }
 
-function make_sidebar(groups, { workspace_title = SIDEBAR_TITLE } = {}) {
-	return { workspace_title, items: groups };
+function make_sidebar(groups, { current_module = SIDEBAR_NAME } = {}) {
+	return { current_module, items: groups };
 }
 
 /** The group as it ships: closed by default, holding the two reference pages. */
@@ -69,10 +71,10 @@ function other_group(options = {}) {
 }
 
 /** Record a user click on a group, the way the desk records one. */
-function remember_click(label, collapsed, workspace_title = SIDEBAR_TITLE) {
+function remember_click(label, collapsed, sidebar_name = SIDEBAR_NAME) {
 	localStorage.setItem(
 		CLICK_STATE_KEY,
-		JSON.stringify({ [workspace_title]: { [label]: collapsed } })
+		JSON.stringify({ [sidebar_name]: { [label]: collapsed } })
 	);
 }
 
@@ -117,7 +119,7 @@ describe("collapse_unvisited_sidebar_groups", () => {
 
 	it("reads the click record of this workspace only", () => {
 		const group = other_group({ collapsed: false });
-		remember_click("Other", false, "taxes");
+		remember_click("Other", false, "Taxes");
 		go_to("/app/taxjar-setup");
 
 		taxjar.collapse_unvisited_sidebar_groups(make_sidebar([group]));
@@ -151,7 +153,7 @@ describe("collapse_unvisited_sidebar_groups", () => {
 		const group = other_group({ collapsed: false });
 		go_to("/app/taxjar-setup");
 
-		taxjar.collapse_unvisited_sidebar_groups(make_sidebar([group], { workspace_title: "taxes" }));
+		taxjar.collapse_unvisited_sidebar_groups(make_sidebar([group], { current_module: "Taxes" }));
 
 		expect(group.close).not.toHaveBeenCalled();
 	});
@@ -175,7 +177,7 @@ describe("the desk's own route pass", () => {
 		const calls = [];
 		frappe.ui.Sidebar = class Sidebar {
 			constructor(groups) {
-				this.workspace_title = SIDEBAR_TITLE;
+				this.current_module = SIDEBAR_NAME;
 				this.items = groups;
 			}
 			set_active_workspace_item() {
