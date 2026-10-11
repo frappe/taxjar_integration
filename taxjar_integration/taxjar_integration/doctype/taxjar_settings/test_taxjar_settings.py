@@ -11382,9 +11382,10 @@ class TestInstallSetup(UnitTestCase):
 		     patch("taxjar_integration.install.sync_all_company_tax_templates") as mock_sync, \
 		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax") as mock_hide, \
 		     patch("taxjar_integration.install.set_taxes_field_description") as mock_desc, \
-		     patch("taxjar_integration.install.add_guided_setup_alert") as mock_alert:
+		     patch("taxjar_integration.install.add_guided_setup_alert") as mock_alert, \
+		     patch("taxjar_integration.install.set_workspace_roles", create=True) as mock_roles:
 			install.setup_taxjar()
-		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert
+		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles
 
 	def test_after_install_runs_full_setup(self):
 		from taxjar_integration import install
@@ -11392,7 +11393,7 @@ class TestInstallSetup(UnitTestCase):
 			install.after_install()
 		mock_setup.assert_called_once()
 
-		mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert = self._run_setup()
+		mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles = self._run_setup()
 		mock_make.assert_called_once()
 		mock_cats.assert_called_once()
 		mock_sync.assert_called_once()
@@ -24330,3 +24331,101 @@ class TestChargeRowsPrintTheirDescriptionOnly(UnitTestCase):
 		html = self._printed(shipping=[self._row("Freight - FI", "Shipping & Forwarding Charges")])
 		self.assertIn("Shipping & Forwarding:", html)
 		self.assertIn("Taxable", html)
+
+
+# ── The workspace roles reach every site ─────────────────────────────────────
+
+
+class TestWorkspaceRoles(UnitTestCase):
+	"""setup_taxjar() gives the TaxJar workspace its roles on every install and
+	migrate.
+
+	The workspace JSON carries them too, but Frappe imports that file only when
+	it is newer than the site's own copy. The app saves the workspace to put
+	back the guided-setup banner, and admins save it to change the layout, so on
+	many sites the file is never imported and the roles never arrive.
+	"""
+
+	def _workspace(self, *roles):
+		"""An unsaved Workspace, so no test writes the site's own."""
+		workspace = frappe.new_doc("Workspace")
+		for role in roles:
+			workspace.append("roles", {"role": role})
+		return workspace
+
+	def _roles(self, workspace):
+		return [row.role for row in workspace.roles]
+
+	def _set(self, workspace, exists=True):
+		from taxjar_integration import install
+
+		with patch.object(install.frappe.db, "exists", return_value=exists), \
+		     patch.object(install.frappe, "get_doc", return_value=workspace), \
+		     patch.object(workspace, "save") as save:
+			install.set_workspace_roles()
+		return save
+
+	def test_an_empty_roles_table_gets_the_three_persona_roles(self):
+		workspace = self._workspace()
+		save = self._set(workspace)
+
+		self.assertEqual(self._roles(workspace), ["System Manager", "Accounts Manager", "Accounts User"])
+		save.assert_called_once_with(ignore_permissions=True)
+
+	def test_only_a_missing_role_is_added(self):
+		workspace = self._workspace("Accounts User", "System Manager")
+		self._set(workspace)
+
+		self.assertEqual(self._roles(workspace), ["Accounts User", "System Manager", "Accounts Manager"])
+
+	def test_a_role_an_admin_added_is_kept(self):
+		workspace = self._workspace("Tax Desk")
+		self._set(workspace)
+
+		self.assertIn("Tax Desk", self._roles(workspace))
+		self.assertEqual(len(self._roles(workspace)), 4)
+
+	def test_nothing_is_saved_when_no_role_is_missing(self):
+		"""Each save moves the workspace's own date forward, which is what keeps
+		the JSON file out, so a save with nothing to add is avoided."""
+		workspace = self._workspace("System Manager", "Accounts Manager", "Accounts User", "Tax Desk")
+		self._set(workspace).assert_not_called()
+
+	def test_a_site_without_the_workspace_is_left_alone(self):
+		from taxjar_integration import install
+
+		with patch.object(install.frappe.db, "exists", return_value=False), \
+		     patch.object(install.frappe, "get_doc") as get_doc:
+			install.set_workspace_roles()
+		get_doc.assert_not_called()
+
+	def test_setup_taxjar_sets_the_roles(self):
+		from taxjar_integration import install
+
+		patches = [
+			patch(f"taxjar_integration.install.{name}")
+			for name in (
+				"make_custom_fields", "add_product_tax_categories", "sync_all_company_tax_templates",
+				"hide_legacy_exempt_from_sales_tax", "set_taxes_field_description", "add_guided_setup_alert",
+			)
+		]
+		for item in patches:
+			item.start()
+			self.addCleanup(item.stop)
+		with patch("taxjar_integration.install.set_workspace_roles") as set_roles:
+			install.setup_taxjar()
+		set_roles.assert_called_once()
+
+	def test_the_roles_are_the_ones_the_workspace_json_ships(self):
+		"""Two copies of one fact: the constant the code adds, and the JSON."""
+		import json
+		import os
+
+		from taxjar_integration import install
+
+		path = os.path.join(
+			os.path.dirname(__file__), "..", "..", "workspace", "taxjar_integration", "taxjar_integration.json"
+		)
+		with open(path) as handle:
+			shipped = [row["role"] for row in json.load(handle)["roles"]]
+		self.assertEqual(list(install.WORKSPACE_ROLES), shipped)

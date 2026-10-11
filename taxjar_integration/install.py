@@ -152,7 +152,8 @@ def setup_taxjar():
 	  applied on every run, not only on the first one: create_tax_categories()
 	  inserts a code the site does not hold and leaves every other row alone, so
 	  a site seeded by an older release picks up the codes added since;
-	* the guided-setup alert banner at the top of the workspace;
+	* the guided-setup alert banner at the top of the workspace, and the roles
+	  that see the workspace;
 	* standard-CoA ledger backfill and TaxJar Sales Tax template sync for every
 	  already-configured company (regional/united_states.py) — this is also what
 	  reconciles an existing site upgrading into this feature for the first time;
@@ -173,6 +174,41 @@ def setup_taxjar():
 	set_taxes_field_description()
 
 	add_guided_setup_alert()
+
+	set_workspace_roles()
+
+
+# The roles that see the TaxJar workspace: every role the TaxJar pages list,
+# which is the TaxJar Manager and TaxJar User personas. The workspace JSON
+# carries the same list.
+WORKSPACE_ROLES = ("System Manager", "Accounts Manager", "Accounts User")
+
+
+def set_workspace_roles():
+	"""Give the TaxJar workspace its roles, on every install and migrate.
+
+	The workspace JSON carries them, but Frappe imports a workspace file only
+	when the file is newer than the site's own copy. This app saves the
+	workspace to put back the guided-setup banner, and admins save it to change
+	the layout, so on many sites the file is never imported and the workspace
+	shows to every desk user.
+
+	Adds a missing role and keeps every role an admin added. A default role an
+	admin removed comes back here, the same as the banner does. Saves only when
+	a role was added: each save moves the workspace's date forward.
+	"""
+	if not frappe.db.exists("Workspace", WORKSPACE):
+		return
+
+	ws = frappe.get_doc("Workspace", WORKSPACE)
+	present = {row.role for row in ws.roles}
+	missing = [role for role in WORKSPACE_ROLES if role not in present]
+	if not missing:
+		return
+
+	for role in missing:
+		ws.append("roles", {"role": role})
+	ws.save(ignore_permissions=True)
 
 
 def add_guided_setup_alert():
