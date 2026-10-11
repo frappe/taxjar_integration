@@ -130,91 +130,61 @@ class TaxJarCsat {
 }
 
 /**
- * A row of five score buttons, 1 to 5, in place of the star Rating field.
+ * A segmented bar of five score buttons, 1 to 5, in place of the star Rating
+ * field. It is the desk TabButtons (frappe.ui.TabButtons), which gives the
+ * gray bar, the radio group, and the arrow keys.
  *
- * Each button has the color of its score (the SCSS reads data-score). The row
- * is a radio group: the arrow keys move the pick, and Tab enters and leaves the
- * row as one stop. The line below the row names the score under the pointer,
- * or the picked score. The line is empty until then.
+ * Each button shows the color of its score (the SCSS reads data-score) on
+ * hover and when picked. The line below names the two ends of the scale.
  */
 class FeedbackScale {
 	constructor($parent, question, on_pick) {
-		this.score = 0;
-		this.on_pick = on_pick;
 		// Translate here, not at load: the bundle can load before the translations.
-		this.labels = [
+		const labels = [
 			__("Very dissatisfied"),
 			__("Dissatisfied"),
 			__("Neutral"),
 			__("Satisfied"),
 			__("Very satisfied"),
 		];
-		this.make($parent, question);
-	}
-
-	make($parent, question) {
-		const label_id = frappe.utils.get_random(8);
-		const buttons = this.labels.map(
-			(label, i) =>
-				`<button type="button" class="taxjar-feedback-scale-option" role="radio"
-					data-score="${i + 1}" aria-checked="false" tabindex="${i ? -1 : 0}"
-					aria-label="${frappe.utils.escape_html(`${i + 1}, ${label}`)}">${i + 1}</button>`
-		).join("");
-
-		this.$wrapper = $(`
-			<div class="taxjar-feedback-scale">
-				<div class="control-label reqd" id="${label_id}">${frappe.utils.escape_html(question)}</div>
-				<div class="taxjar-feedback-scale-options" role="radiogroup" aria-labelledby="${label_id}">
-					${buttons}
-				</div>
-				<div class="taxjar-feedback-scale-label" aria-hidden="true"></div>
-			</div>
-		`).appendTo($parent);
-		this.$options = this.$wrapper.find(".taxjar-feedback-scale-option");
-		this.$label = this.$wrapper.find(".taxjar-feedback-scale-label");
-		this.show_label(0);
-
-		this.$options
-			.on("click", (e) => this.pick(Number(e.currentTarget.dataset.score)))
-			.on("mouseenter", (e) => this.show_label(Number(e.currentTarget.dataset.score)))
-			.on("mouseleave", () => this.show_label(this.score))
-			.on("keydown", (e) => this.on_key(e));
-	}
-
-	pick(score) {
-		this.score = score;
-		this.$options.each((i, button) => {
-			const on = i + 1 === score;
-			button.setAttribute("aria-checked", on ? "true" : "false");
-			button.tabIndex = on ? 0 : -1;
+		this.buttons = new frappe.ui.TabButtons({
+			label: question,
+			size: "md",
+			options: labels.map((label, i) => ({ label: String(i + 1), value: i + 1 })),
+			on_change: on_pick,
 		});
-		this.$wrapper.addClass("has-score");
-		this.show_label(score);
-		this.on_pick(score);
+		this.buttons.pills.forEach((pill, i) => {
+			pill.el.dataset.score = i + 1;
+			pill.el.setAttribute("aria-label", `${i + 1}, ${labels[i]}`);
+		});
+		this.clear();
+
+		$(`
+			<div class="taxjar-feedback-scale">
+				<div class="control-label reqd" aria-hidden="true">${frappe.utils.escape_html(question)}</div>
+				<div class="taxjar-feedback-scale-ends" aria-hidden="true">
+					<span>${frappe.utils.escape_html(labels[0])}</span>
+					<span>${frappe.utils.escape_html(labels[labels.length - 1])}</span>
+				</div>
+			</div>
+		`)
+			.appendTo($parent)
+			.find(".control-label")
+			.after(this.buttons.$el);
 	}
 
-	on_key(e) {
-		const current = this.score || 1;
-		const next = {
-			ArrowRight: current + 1,
-			ArrowDown: current + 1,
-			ArrowLeft: current - 1,
-			ArrowUp: current - 1,
-			Home: 1,
-			End: this.labels.length,
-		}[e.key];
-		if (!next) return;
-
-		e.preventDefault();
-		// Wrap around at each end, as a radio group does.
-		const count = this.labels.length;
-		const score = ((next - 1 + count) % count) + 1;
-		this.pick(score);
-		this.$options.get(score - 1).focus();
-	}
-
-	show_label(score) {
-		this.$label.text(score ? this.labels[score - 1] : "");
+	/**
+	 * Start with no score. TabButtons always selects its first option, and a
+	 * survey that starts at 1 pushes the user to that score.
+	 */
+	clear() {
+		this.buttons.selected = null;
+		this.buttons.pills.forEach((pill, i) => {
+			pill.el.setAttribute("data-state", "inactive");
+			pill.el.setAttribute("aria-checked", "false");
+			// One tab stop, as TabButtons gives the selected button.
+			pill.el.tabIndex = i ? -1 : 0;
+		});
 	}
 }
 

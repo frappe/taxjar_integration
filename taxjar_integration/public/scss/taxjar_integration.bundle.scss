@@ -654,9 +654,11 @@
 }
 
 // ── CSAT feedback scale ───────────────────────────────────────────────────
-// The 1–5 score buttons in the feedback dialog (FeedbackScale in csat_card.js).
-// Each button always shows the tint of its score; the picked one is solid.
-// Theme tokens, so the colors follow the dark theme.
+// The 1–5 score bar in the feedback dialog (FeedbackScale in csat_card.js).
+// It is the desk TabButtons, made full width. A button always shows the tint
+// of its score, a darker tint on hover, and the solid color when picked.
+// Theme tokens, so the colors follow the dark theme. The .es-tab-buttons step
+// in each selector beats the TabButtons rules for the same states.
 
 .taxjar-feedback-scale {
 	display: flex;
@@ -667,96 +669,93 @@
 	.control-label {
 		margin-bottom: 0;
 	}
-}
 
-.taxjar-feedback-scale-options {
-	display: flex;
-	gap: 6px;
-}
+	.es-tab-buttons {
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		border-radius: 10px;
+	}
 
-.taxjar-feedback-scale-option {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 44px;
-	height: 36px;
-	padding: 0;
-	border: none;
-	border-radius: 8px;
-	background: var(--scale-tint);
-	color: var(--scale-ink);
-	font-size: var(--text-base);
-	font-weight: var(--font-weight-medium);
-	cursor: pointer;
-	transition:
-		background 0.12s,
-		color 0.12s,
-		box-shadow 0.12s,
-		opacity 0.12s;
+	.es-tab-buttons .es-pill {
+		flex: 1;
+		// One bar: only the two outer ends are round. Logical corners, so the
+		// round ends follow the reading direction.
+		border-radius: 0;
+		font-size: var(--text-base);
+		font-weight: var(--font-weight-medium);
+		background: var(--scale-tint);
+		color: var(--scale-ink);
 
-	&[data-score="1"] {
+		&:first-child {
+			border-start-start-radius: 8px;
+			border-end-start-radius: 8px;
+		}
+
+		&:last-child {
+			border-start-end-radius: 8px;
+			border-end-end-radius: 8px;
+		}
+
+		&:hover {
+			background: var(--scale-tint-hover);
+		}
+
+		&[data-state="active"] {
+			background: var(--scale-solid);
+			color: var(--scale-on);
+			box-shadow: var(--shadow-sm);
+		}
+	}
+
+	.es-pill[data-score="1"] {
 		--scale-tint: var(--surface-red-2);
+		--scale-tint-hover: var(--surface-red-3);
 		--scale-ink: var(--ink-red-7);
 		--scale-solid: var(--surface-red-6);
 		--scale-on: var(--white);
 	}
 
-	&[data-score="2"] {
+	.es-pill[data-score="2"] {
 		--scale-tint: var(--surface-orange-2);
+		--scale-tint-hover: var(--surface-orange-3);
 		--scale-ink: var(--ink-orange-7);
 		--scale-solid: var(--surface-orange-6);
 		--scale-on: var(--white);
 	}
 
-	&[data-score="3"] {
+	.es-pill[data-score="3"] {
 		--scale-tint: var(--surface-amber-2);
+		--scale-tint-hover: var(--surface-amber-3);
 		--scale-ink: var(--ink-amber-7);
 		--scale-solid: var(--surface-amber-6);
 		// Amber is light, so dark text reads better on it, in both themes.
 		--scale-on: var(--amber-900);
 	}
 
-	// Frappe has no lime, so 4 is the lighter green and 5 the darker one.
-	&[data-score="4"] {
+	// Frappe has no lime, so 4 and 5 are both green, and 5 is one step
+	// stronger.
+	.es-pill[data-score="4"] {
 		--scale-tint: var(--surface-green-2);
+		--scale-tint-hover: var(--surface-green-3);
 		--scale-ink: var(--ink-green-7);
 		--scale-solid: var(--surface-green-6);
 		--scale-on: var(--white);
 	}
 
-	&[data-score="5"] {
-		--scale-tint: var(--surface-green-2);
-		--scale-ink: var(--ink-green-7);
-		--scale-solid: var(--green-600);
+	.es-pill[data-score="5"] {
+		--scale-tint: var(--surface-green-3);
+		--scale-tint-hover: var(--surface-green-4);
+		--scale-ink: var(--ink-green-8);
+		--scale-solid: var(--surface-green-7);
 		--scale-on: var(--white);
-	}
-
-	&:hover {
-		box-shadow: inset 0 0 0 1px var(--scale-solid);
-	}
-
-	&:focus-visible {
-		outline: none;
-		box-shadow: var(--focus-default);
-	}
-
-	&[aria-checked="true"] {
-		background: var(--scale-solid);
-		color: var(--scale-on);
-		box-shadow:
-			0 0 0 2px var(--modal-bg),
-			0 0 0 4px var(--scale-solid);
-	}
-
-	// After a pick, fade the other scores. 0.7, not the design's 0.55, keeps
-	// the numbers readable.
-	.has-score &:not([aria-checked="true"]):not(:hover) {
-		opacity: 0.7;
 	}
 }
 
-.taxjar-feedback-scale-label {
-	height: 16px;
+.taxjar-feedback-scale-ends {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
 	font-size: var(--text-xs);
 	color: var(--ink-gray-5);
 }

@@ -1,8 +1,13 @@
 """The CSAT survey: when to ask a user, and what to send to Pulse.
 
+The card shows after TaxJar Setup is finished and the site has used TaxJar
+to calculate tax or to sync an invoice.
+
 The survey state of each user is kept in user defaults on the server, not in
 the browser. A survey "cycle" starts when the card first shows. The cycle ends
-when the user sends a score or closes the card, or after OPEN_FOR_DAYS.
+when the user sends a score or closes the card, or after OPEN_FOR_DAYS. The next
+cycle can start ASK_AFTER_ANSWER_DAYS after a sent score, and ASK_AGAIN_AFTER_DAYS
+after a closed or ignored card.
 
 All survey events are site-level and have no user ID, because the survey
 tells users that their feedback is anonymous. The user state above stays on
@@ -19,16 +24,21 @@ from taxjar_integration.taxjar_integration.telemetry import SCORES, capture
 
 SURVEY = "csat"
 
-# The TaxJar Manager and TaxJar User personas (docs/taxjar/09-roles-and-permissions.md).
-ASK_ROLES = {"Accounts User", "Accounts Manager"}
+# The TaxJar Manager and TaxJar User personas (docs/taxjar/09-roles-and-permissions.md),
+# and the System Manager, who often sets the app up.
+ASK_ROLES = {"Accounts User", "Accounts Manager", "System Manager"}
 
-MIN_SYNCED_INVOICES = 20
-MIN_DAYS_OF_USE = 30
-ASK_EVERY_DAYS = 90
 OPEN_FOR_DAYS = 14
+ASK_AGAIN_AFTER_DAYS = 15
+ASK_AFTER_ANSWER_DAYS = 30
+
+# Documents where TaxJar calculated the tax. taxjar_has_nexus is set to 1 only
+# on that path; no address, exports and out-of-coverage destinations set 0.
+TAX_DOCTYPES = ("Quotation", "Sales Order", "Sales Invoice")
 
 ASKED_ON = "taxjar_csat_asked_on"
 CLOSED_ON = "taxjar_csat_closed_on"
+ANSWERED = "taxjar_csat_answered"
 OPTED_OUT = "taxjar_csat_opted_out"
 
 
@@ -75,6 +85,7 @@ class CsatSurvey:
 			return
 		self._set(ASKED_ON, today())
 		frappe.defaults.clear_user_default(CLOSED_ON, self.user)
+		frappe.defaults.clear_user_default(ANSWERED, self.user)
 		capture("taxjar_csat_shown", survey=SURVEY)
 
 	def _submitted(self, score, comment):
@@ -90,6 +101,7 @@ class CsatSurvey:
 			answer["comment"] = comment
 
 		self._close()
+		self._set(ANSWERED, 1)
 		capture("taxjar_csat_submitted", **answer)
 
 	def _dismissed(self):
@@ -110,7 +122,7 @@ class CsatSurvey:
 			is_pulse_enabled()
 			and not cint(self._get(OPTED_OUT))
 			and bool(ASK_ROLES & set(frappe.get_roles(self.user)))
-			and _is_taxjar_enabled()
+			and _taxjar_is_set_up()
 		)
 
 	def _is_open(self) -> bool:
@@ -121,7 +133,12 @@ class CsatSurvey:
 
 	def _next_cycle_reached(self) -> bool:
 		asked_on = self._get(ASKED_ON)
-		return not asked_on or getdate(today()) >= getdate(add_days(asked_on, ASK_EVERY_DAYS))
+		if not asked_on:
+			return True
+		# A card that the user did not close ends with its open period.
+		ended_on = self._get(CLOSED_ON) or add_days(asked_on, OPEN_FOR_DAYS)
+		wait = ASK_AFTER_ANSWER_DAYS if cint(self._get(ANSWERED)) else ASK_AGAIN_AFTER_DAYS
+		return getdate(today()) >= getdate(add_days(ended_on, wait))
 
 	def _close(self):
 		self._set(CLOSED_ON, today())
@@ -133,11 +150,18 @@ class CsatSurvey:
 		frappe.defaults.set_user_default(key, value, self.user)
 
 
-def _site_has_used_taxjar() -> bool:
-	"""The site sent enough invoices to TaxJar, over enough days, to judge the app."""
-	synced = {"taxjar_sync_status": "Synced", "docstatus": 1}
-	if frappe.db.count("Sales Invoice", synced) < MIN_SYNCED_INVOICES:
-		return False
+def _taxjar_is_set_up() -> bool:
+	"""TaxJar is on, and the admin finished TaxJar Setup."""
+	return _is_taxjar_enabled() and bool(cint(frappe.db.get_single_value("TaxJar Settings", "setup_complete")))
 
-	first = frappe.db.get_value("Sales Invoice", synced, "creation", order_by="creation asc")
-	return bool(first) and getdate(first) <= getdate(add_days(today(), -MIN_DAYS_OF_USE))
+
+def _site_has_used_taxjar() -> bool:
+	"""TaxJar calculated the tax on a document, or the site synced an invoice to TaxJar.
+
+	Checked for the site, not for the user: the TaxJar Manager who set the app up
+	often makes no sales documents, and must still be asked.
+	"""
+	calculated = {"taxjar_has_nexus": 1, "docstatus": ["<", 2]}
+	if any(frappe.db.exists(doctype, calculated) for doctype in TAX_DOCTYPES):
+		return True
+	return bool(frappe.db.exists("Sales Invoice", {"taxjar_sync_status": "Synced", "docstatus": 1}))
