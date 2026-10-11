@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 
+from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.exporting import send_xlsx
 from taxjar_integration.taxjar_integration.pagination import (
 	PAGE_SIZE,
@@ -97,7 +98,7 @@ def get_transactions(
 	scope: str = ALL_SCOPE,
 	page_size: int | str = PAGE_SIZE,
 ):
-	frappe.has_permission("Sales Invoice", "read", throw=True)
+	require_permission("Sales Invoice", "read")
 	if not _taxjar_invoice_fields_ready():
 		return not_configured_response("invoices")
 
@@ -223,7 +224,7 @@ def get_summary(filters: dict | str | None = None):
 	draft total, both under the same company/date/type filters as the table -
 	the strip drills into what is on screen, so it has to be scoped the same.
 	"""
-	frappe.has_permission("Sales Invoice", "read", throw=True)
+	require_permission("Sales Invoice", "read")
 	if not _taxjar_invoice_fields_ready():
 		return not_configured_response()
 
@@ -334,7 +335,7 @@ def export_transactions(filters: dict | str | None = None, scope: str = ALL_SCOP
 	Answered with a file rather than JSON, so the client reaches it with a form
 	POST rather than frappe.xcall.
 	"""
-	frappe.has_permission("Sales Invoice", "read", throw=True)
+	require_permission("Sales Invoice", "read")
 	if not _taxjar_invoice_fields_ready():
 		frappe.throw(
 			_("TaxJar is not set up yet. Enable a TaxJar feature in TaxJar Settings first."),
@@ -362,7 +363,7 @@ def export_transactions(filters: dict | str | None = None, scope: str = ALL_SCOP
 
 @frappe.whitelist(methods=["POST"])
 def bulk_retry(invoices: list | str):
-	frappe.has_permission("Sales Invoice", "write", throw=True)
+	require_permission("Sales Invoice", "write")
 	if not _taxjar_invoice_fields_ready():
 		frappe.throw(
 			_("TaxJar is not set up yet. Enable a TaxJar feature in TaxJar Settings first."),
@@ -375,7 +376,7 @@ def bulk_retry(invoices: list | str):
 	# frappe.db.set_value, which enforces nothing. Checked up front so a partly
 	# permitted list is refused rather than half-applied.
 	for name in invoices:
-		frappe.has_permission("Sales Invoice", "write", doc=name, throw=True)
+		require_permission("Sales Invoice", "write", doc=name)
 
 	queued = 0
 	for name in invoices:

@@ -19,6 +19,8 @@ from taxjar.response import TaxJarResponse
 from erpnext import get_region
 from erpnext.setup.utils import get_exchange_rate
 
+from taxjar_integration.taxjar_integration.access import require_permission
+
 # ISO 3166-2 region names, in the order the State Code select offers them (by
 # state name, not by code). The same two maps, with the same values, are
 # US_STATE_NAMES / CA_PROVINCE_NAMES in public/js/taxjar_utils.js - the client
@@ -603,7 +605,7 @@ def resync_transaction(invoice_name: str):
 	button is hidden in that case too (see _add_taxjar_buttons in
 	sales_invoice.js); this is what makes it true rather than merely unoffered.
 	"""
-	frappe.has_permission("Sales Invoice", "write", doc=invoice_name, throw=True)
+	require_permission("Sales Invoice", "write", doc=invoice_name)
 
 	company = frappe.db.get_value("Sales Invoice", invoice_name, "company")
 	if not company_scope(company).files:
@@ -901,7 +903,7 @@ def _record_sync_failure(err, action, payload, ctx, invoice_name):
 @frappe.whitelist()
 def fetch_transaction_from_taxjar(invoice_name: str):
 	"""Pull current transaction state from TaxJar and return the response data."""
-	frappe.has_permission("Sales Invoice", "read", doc=invoice_name, throw=True)
+	require_permission("Sales Invoice", "read", doc=invoice_name)
 
 	doc = frappe.get_doc("Sales Invoice", invoice_name)
 	client = get_client(doc.company)
@@ -956,7 +958,7 @@ def fetch_transaction_from_taxjar(invoice_name: str):
 @frappe.whitelist(methods=["POST"])
 def delete_transaction_manual(invoice_name: str):
 	"""Manual deletion of a transaction from TaxJar (for cleanup)."""
-	frappe.has_permission("Sales Invoice", "write", doc=invoice_name, throw=True)
+	require_permission("Sales Invoice", "write", doc=invoice_name)
 
 	doc = frappe.get_doc("Sales Invoice", invoice_name)
 	client = get_client(doc.company)
@@ -1414,7 +1416,7 @@ def preview_foreign_tax_rows(doc_json: dict | str):
 	not what is already in the database.
 	"""
 	doc_data = json.loads(doc_json) if isinstance(doc_json, str) else doc_json
-	frappe.has_permission(doc_data.get("doctype"), "read", throw=True)
+	require_permission(doc_data.get("doctype"), "read")
 
 	company = doc_data.get("company")
 	if not company:
@@ -1423,7 +1425,7 @@ def preview_foreign_tax_rows(doc_json: dict | str):
 	# The doctype above is whatever the payload said, and so is the company. A
 	# caller could otherwise name a doctype they may read and a company they may
 	# not, and learn from the answer whether that company calculates tax.
-	frappe.has_permission("Company", "read", doc=company, throw=True)
+	require_permission("Company", "read", doc=company)
 
 	if not company_scope(company).calculates:
 		return {"foreign_rows": []}
@@ -2452,7 +2454,7 @@ def get_region_exemption(customer: str, address: str | None = None):
 	lock the per-transaction override, so a sale that is already exempt says so
 	before it is saved. Changes no tax on its own.
 	"""
-	frappe.has_permission("Customer", "read", doc=customer, throw=True)
+	require_permission("Customer", "read", doc=customer)
 
 	exemption_type, state = _customer_master_exemption(customer, address)
 	if not exemption_type:
@@ -2608,7 +2610,7 @@ def check_nexus(shipping_address_name: str, company: str):
 	# does not exist raises DoesNotExistError, and this is called on every
 	# shipping_address_name change, where a stale link should stay a quiet
 	# no-op rather than an error dialog.
-	frappe.has_permission("Address", "read", doc=shipping_address_name, throw=True)
+	require_permission("Address", "read", doc=shipping_address_name)
 
 	try:
 		address = frappe.get_doc("Address", shipping_address_name)
@@ -2674,7 +2676,7 @@ def get_destination_address(address: str):
 	address = address.strip()
 	if not frappe.db.exists("Address", address):
 		return {}
-	frappe.has_permission("Address", "read", doc=address, throw=True)
+	require_permission("Address", "read", doc=address)
 
 	row = frappe.db.get_value(
 		"Address", address,
@@ -2716,7 +2718,7 @@ def update_destination_address(address: str, values: str | dict | None = None):
 		)
 
 	address = address.strip()
-	frappe.has_permission("Address", "write", doc=address, throw=True)
+	require_permission("Address", "write", doc=address)
 
 	if isinstance(values, str):
 		values = json.loads(values or "{}")
@@ -2761,8 +2763,8 @@ def create_customer_address(customer: str, values: str | dict | None = None):
 
 	# Read on the Customer, create on the Address. The link row names the
 	# customer, so a user who cannot see that customer cannot name it here.
-	frappe.has_permission("Customer", "read", doc=customer, throw=True)
-	frappe.has_permission("Address", "create", throw=True)
+	require_permission("Customer", "read", doc=customer)
+	require_permission("Address", "create")
 
 	if isinstance(values, str):
 		values = json.loads(values or "{}")
@@ -2813,7 +2815,7 @@ def check_export_destination(address: str, company: str | None = None):
 	if not frappe.db.exists("Address", address):
 		return {}
 
-	frappe.has_permission("Address", "read", doc=address, throw=True)
+	require_permission("Address", "read", doc=address)
 
 	country = export_destination_country(address)
 	if not country:
@@ -2821,14 +2823,14 @@ def check_export_destination(address: str, company: str | None = None):
 
 	answer = {"country": country}
 	if isinstance(company, str) and company.strip():
-		frappe.has_permission("Company", "read", doc=company, throw=True)
+		require_permission("Company", "read", doc=company)
 		answer["files_exports"] = company_scope(company).files_exports
 	return answer
 
 
 @frappe.whitelist()
 def get_customer_addresses(customer: str):
-	frappe.has_permission("Address", "read", throw=True)
+	require_permission("Address", "read")
 	# get_list, not get_all: get_all ignores User Permissions entirely, so a user
 	# restricted to one company could enumerate any customer's addresses by name.
 	return frappe.get_list(
@@ -3297,7 +3299,7 @@ def get_company_scope(company: str):
 	United States and one with a switch turned off are both "no", but only one of
 	them is something the reader can go and change.
 	"""
-	frappe.has_permission("Company", "read", doc=company, throw=True)
+	require_permission("Company", "read", doc=company)
 
 	scope = company_scope(company)
 	return {
@@ -3325,8 +3327,8 @@ def verify_address_with_taxjar(address_name: str, company: str):
 	or transaction form is follow-up work. It is kept, and kept callable, because
 	the check itself is useful; it was where and how it ran that was wrong.
 	"""
-	frappe.has_permission("Address", "read", doc=address_name, throw=True)
-	frappe.has_permission("Company", "read", doc=company, throw=True)
+	require_permission("Address", "read", doc=address_name)
+	require_permission("Company", "read", doc=company)
 
 	if not company_scope(company).uses_taxjar:
 		return {"checked": False, "reason": "out_of_scope"}
@@ -3868,11 +3870,11 @@ def resync_customer(customer_name: str, company: str):
 	button reloads the form and reports the resulting sync status. The worker
 	below stays un-whitelisted so enqueue callers are unaffected.
 	"""
-	frappe.has_permission("Customer", "write", doc=customer_name, throw=True)
+	require_permission("Customer", "write", doc=customer_name)
 	# The company is named by the caller, so it is checked like any other
 	# argument, the same as in verify_address_with_taxjar() and
 	# get_company_scope().
-	frappe.has_permission("Company", "read", doc=company, throw=True)
+	require_permission("Company", "read", doc=company)
 
 	if company not in customer_sync_companies(customer_name):
 		# One test for three refusals - the company does not use TaxJar, it is
@@ -3914,7 +3916,7 @@ def get_customer_sync_companies(customer_name: str):
 	every allowed company would re-create the customer in an account a removal
 	is still waiting to clear.
 	"""
-	frappe.has_permission("Customer", "read", doc=customer_name, throw=True)
+	require_permission("Customer", "read", doc=customer_name)
 	return customer_sync_companies(customer_name)
 
 

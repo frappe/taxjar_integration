@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 
+from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.exporting import send_xlsx
 from taxjar_integration.taxjar_integration.pagination import (
 	PAGE_SIZE,
@@ -121,7 +122,7 @@ def get_customers(
 	scope: str = ALL_SCOPE,
 	page_size: int | str = PAGE_SIZE,
 ):
-	frappe.has_permission("Customer", "read", throw=True)
+	require_permission("Customer", "read")
 	if not _taxjar_customer_fields_ready():
 		return not_configured_response("customers")
 
@@ -228,7 +229,7 @@ def get_summary(filters: dict | str | None = None):
 	"""Counts for the summary strip. Scoped by the same filters as the table so
 	the strip always describes what is on screen.
 	"""
-	frappe.has_permission("Customer", "read", throw=True)
+	require_permission("Customer", "read")
 	if not _taxjar_customer_fields_ready():
 		return not_configured_response()
 
@@ -268,7 +269,7 @@ def get_summary(filters: dict | str | None = None):
 
 @frappe.whitelist()
 def get_exempt_regions(customer: str):
-	frappe.has_permission("Customer", "read", doc=customer, throw=True)
+	require_permission("Customer", "read", doc=customer)
 
 	# get_all on a child table, gated by the doc-level Customer check above -
 	# get_list would need a parent_doctype and still resolve to the same rows.
@@ -343,7 +344,7 @@ def export_customers(filters: dict | str | None = None, scope: str = ALL_SCOPE):
 	Answered with a file rather than JSON, so the client reaches it with a form
 	POST rather than frappe.xcall.
 	"""
-	frappe.has_permission("Customer", "read", throw=True)
+	require_permission("Customer", "read")
 	_ensure_taxjar_customer_fields()
 
 	filters = parse_filters(filters)
@@ -372,7 +373,7 @@ def _check_each(customers):
 	bulk edit.
 	"""
 	for name in customers:
-		frappe.has_permission("Customer", "write", doc=name, throw=True)
+		require_permission("Customer", "write", doc=name)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -395,7 +396,7 @@ def configure_exemption(
 	TaxJar field actually changed - so there is no separate "send to TaxJar"
 	step for the caller to remember.
 	"""
-	frappe.has_permission("Customer", "write", throw=True)
+	require_permission("Customer", "write")
 	_ensure_taxjar_customer_fields()
 
 	customers = parse_document_names(customers, label=frappe._("customers"))
@@ -419,7 +420,7 @@ def configure_exemption(
 
 @frappe.whitelist(methods=["POST"])
 def bulk_clear_exemption(customers: list | str):
-	frappe.has_permission("Customer", "write", throw=True)
+	require_permission("Customer", "write")
 	_ensure_taxjar_customer_fields()
 	customers = parse_document_names(customers, label=frappe._("customers"))
 	_check_each(customers)
@@ -491,7 +492,7 @@ def bulk_sync_to_taxjar(customers: list | str):
 	the 15-minute retry cron (retry_failed_taxjar_syncs) covers Sales Invoices
 	only, never Customers.
 	"""
-	frappe.has_permission("Customer", "write", throw=True)
+	require_permission("Customer", "write")
 	_ensure_taxjar_customer_fields()
 	customers = parse_document_names(customers, label=frappe._("customers"))
 	_check_each(customers)

@@ -1282,10 +1282,10 @@ class TestPreviewForeignTaxRows(UnitTestCase):
 			preview_foreign_tax_rows(doc_data)
 
 		self.assertIn(
-			call("Sales Invoice", "read", throw=True), mock_perm.call_args_list
+			call("Sales Invoice", "read", doc=None), mock_perm.call_args_list
 		)
 		self.assertIn(
-			call("Company", "read", doc="Test Co", throw=True), mock_perm.call_args_list
+			call("Company", "read", doc="Test Co"), mock_perm.call_args_list
 		)
 
 	def test_accepts_a_json_string_as_well_as_a_dict(self):
@@ -6368,7 +6368,7 @@ class TestSyncStatusRealtimeJS(UnitTestCase):
 		     patch(f"{mod}._customer_master_exemption", return_value=(None, None)):
 			get_region_exemption("CUST-0001", "ADDR-0001")
 
-		mock_has_permission.assert_called_once_with("Customer", "read", doc="CUST-0001", throw=True)
+		mock_has_permission.assert_called_once_with("Customer", "read", doc="CUST-0001")
 
 	def test_customer_exemption_is_region_scoped(self):
 		"""A customer exempt only in Florida is not exempt on a New Jersey
@@ -18049,7 +18049,7 @@ class TestGetDefaultLedgersAPI(UnitTestCase):
 		     patch(f"{REGIONAL}.resolve_default_ledgers", return_value=resolved) as mock_resolve:
 			result = get_default_ledgers("Test Co")
 
-		mock_perm.assert_called_once_with("TaxJar Settings", "read", throw=True)
+		mock_perm.assert_called_once_with("TaxJar Settings", "read", doc=None)
 		mock_resolve.assert_called_once_with("Test Co")
 		self.assertEqual(result, resolved)
 
@@ -19693,7 +19693,7 @@ class TestGetCompanyScopeEndpoint(TaxJarTestCase):
 		with self.scope_patches(), patch.object(module.frappe, "has_permission") as mock_perm:
 			module.get_company_scope(US_CALC.name)
 
-		mock_perm.assert_called_once_with("Company", "read", doc=US_CALC.name, throw=True)
+		mock_perm.assert_called_once_with("Company", "read", doc=US_CALC.name)
 
 
 class TestCustomerSyncFansOutOnlyToServableCompanies(TaxJarTestCase):
@@ -20748,7 +20748,7 @@ class TestTheDestinationAddressGuard(UnitTestCase):
 				"country", "taxjar_region_code",
 			]),
 		)
-		self.assertIn('frappe.has_permission("Address", "write"', source)
+		self.assertIn('require_permission("Address", "write"', source)
 
 	def test_the_guard_runs_on_save_after_the_address_picker(self):
 		"""It reads the fields of the address the document ends up with, and
@@ -20929,8 +20929,8 @@ class TestCreatingTheCustomersFirstAddress(UnitTestCase):
 		from taxjar_integration.taxjar_integration import taxjar_integration as ti
 
 		source = inspect.getsource(ti.create_customer_address)
-		self.assertIn('frappe.has_permission("Customer", "read"', source)
-		self.assertIn('frappe.has_permission("Address", "create"', source)
+		self.assertIn('require_permission("Customer", "read"', source)
+		self.assertIn('require_permission("Address", "create"', source)
 
 	def test_it_stores_the_state_code_a_united_states_sale_is_filed_under(self):
 		"""The dialog asks for it the way the Address form does, and the sale is
@@ -24429,3 +24429,73 @@ class TestWorkspaceRoles(UnitTestCase):
 		with open(path) as handle:
 			shipped = [row["role"] for row in json.load(handle)["roles"]]
 		self.assertEqual(list(install.WORKSPACE_ROLES), shipped)
+
+
+# ── A permission refusal links to the roles documentation ────────────────────
+
+
+class TestPermissionRefusalLinksTheDocs(UnitTestCase):
+	"""Every permission check in the app goes through require_permission(), so
+	a refusal says which right is missing and links to the task table that
+	lists the rights for each TaxJar task."""
+
+	def test_a_refusal_names_the_right_and_links_the_task_table(self):
+		from taxjar_integration.taxjar_integration import access
+
+		with patch.object(access.frappe, "has_permission", return_value=False):
+			with self.assertRaises(frappe.PermissionError) as ctx:
+				access.require_permission("Customer", "write", doc="CUST-0001")
+
+		message = str(ctx.exception)
+		self.assertIn("Customer", message)
+		self.assertIn("write", message)
+		self.assertIn(f'href="{access.ROLES_DOCS_URL}#{access.TASK_TABLE_ANCHOR}"', message)
+		self.assertIn("ask your administrator to update permissions for your user.", message)
+		# A blank line, then the link on a line of its own, with the arrow in it.
+		self.assertIn("for your user.<br><br><a ", message)
+		self.assertIn("Read documentation &rarr;</a>", message)
+
+	def test_a_user_with_the_right_passes(self):
+		from taxjar_integration.taxjar_integration import access
+
+		with patch.object(access.frappe, "has_permission", return_value=True) as has_permission:
+			access.require_permission("Customer", "write", doc="CUST-0001")
+
+		has_permission.assert_called_once_with("Customer", "write", doc="CUST-0001")
+
+	def test_the_desk_script_knows_the_same_docs_url(self):
+		"""Two copies of one fact: the URL in the refusal, and the URL the desk
+		script opens in a new tab. Frappe drops target from message links."""
+		import os
+		import re
+
+		from taxjar_integration.taxjar_integration import access
+
+		path = os.path.join(frappe.get_app_path("taxjar_integration"), "public", "js", "taxjar_utils.js")
+		with open(path) as handle:
+			match = re.search(r'taxjar_integration\.ROLES_DOCS_URL = "([^"]+)";', handle.read())
+		self.assertIsNotNone(match, "taxjar_utils.js no longer sets taxjar_integration.ROLES_DOCS_URL")
+		self.assertEqual(match.group(1), access.ROLES_DOCS_URL)
+
+	def test_the_anchor_is_the_task_table_heading(self):
+		"""The heading in docs/taxjar/09-roles-and-permissions.md, as a slug."""
+		from taxjar_integration.taxjar_integration import access
+
+		self.assertEqual(access.TASK_TABLE_ANCHOR, "taxjar-tasks-and-the-rights-they-need")
+
+	def test_no_check_throws_frappes_own_message(self):
+		"""frappe.has_permission(..., throw=True) raises with Frappe's text, which
+		has no link. A check written that way would skip the docs."""
+		import os
+
+		root = os.path.dirname(frappe.get_module_path("taxjar_integration"))
+		offenders = []
+		for folder, _dirs, files in os.walk(root):
+			for name in files:
+				if not name.endswith(".py") or name.startswith("test_"):
+					continue
+				with open(os.path.join(folder, name)) as handle:
+					for number, line in enumerate(handle, 1):
+						if "has_permission(" in line and "throw=True" in line:
+							offenders.append(f"{name}:{number}")
+		self.assertEqual(offenders, [])

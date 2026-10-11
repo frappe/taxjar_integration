@@ -31,6 +31,7 @@ from frappe import _
 from frappe.utils import cint
 from frappe.utils.password import get_decrypted_password
 
+from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	settings_write_lock,
 )
@@ -68,7 +69,7 @@ def _nexus_by_company(settings):
 @frappe.whitelist()
 def get_setup_state():
 	"""Return the current TaxJar Settings slice the guided setup renders from."""
-	frappe.has_permission(SETTINGS, "read", throw=True)
+	require_permission(SETTINGS, "read")
 
 	settings = frappe.get_single(SETTINGS)
 
@@ -145,7 +146,7 @@ def test_connection(company: str, token: str | None = None, mode: str | None = N
 	defaults to the settings' current API Mode so a not-yet-saved mode change
 	on Step 2 can still be tested before Continue is pressed.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	settings = frappe.get_single(SETTINGS)
 	mode = mode or settings.api_mode or "Live"
@@ -208,7 +209,7 @@ def save_connection(
 	any edit, so it has no routing decision to make - clearing the stamp is the
 	whole of what these two facts are for.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	credentials = frappe.parse_json(credentials) if isinstance(credentials, str) else (credentials or [])
 
@@ -264,7 +265,7 @@ def get_default_ledgers(company: str):
 	"""Preview the standard-CoA ledger lookup for a company, without persisting
 	anything - lets the Accounts step pre-fill blank fields before the admin sees
 	them. Read-only counterpart to save_company_accounts()."""
-	frappe.has_permission(SETTINGS, "read", throw=True)
+	require_permission(SETTINGS, "read")
 
 	from taxjar_integration.taxjar_integration.regional.united_states import (
 		resolve_default_ledgers,
@@ -277,7 +278,7 @@ def get_default_ledgers(company: str):
 def save_company_accounts(rows: list | str):
 	"""Upsert company_config account heads. Both heads are mandatory on the
 	child doctype, so an incomplete row surfaces that as a normal save error."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	rows = frappe.parse_json(rows) if isinstance(rows, str) else (rows or [])
 
@@ -391,10 +392,10 @@ def get_company_address_state(company: str, address: str | None = None):
 	complete, which is _REQUIRED_ADDRESS_FIELDS' business and not the client's to
 	re-derive.
 	"""
-	frappe.has_permission(SETTINGS, "read", throw=True)
+	require_permission(SETTINGS, "read")
 
 	if address:
-		frappe.has_permission("Address", "read", doc=address, throw=True)
+		require_permission("Address", "read", doc=address)
 		if address not in company_address_names(company):
 			frappe.throw(
 				_("{0} is not an address of {1}.").format(address, company),
@@ -448,7 +449,7 @@ def _set_preferred_billing(company, address):
 		wanted = 1 if name == address else 0
 		if cint(frappe.db.get_value("Address", name, "is_primary_address")) == wanted:
 			continue
-		frappe.has_permission("Address", "write", doc=name, throw=True)
+		require_permission("Address", "write", doc=name)
 		doc = frappe.get_doc("Address", name)
 		doc.is_primary_address = wanted
 		doc.save()
@@ -463,7 +464,7 @@ def save_company_address(rows: list | str):
 	depends on it - rewriting it from here would be a side effect nobody asked
 	for.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	rows = frappe.parse_json(rows) if isinstance(rows, str) else (rows or [])
 
@@ -484,9 +485,9 @@ def create_company_address(company: str, values: dict | str):
 	other and the Connect step's link filter never offers one - so it is the only
 	value that can be correct here.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
-	frappe.has_permission("Company", "read", doc=company, throw=True)
-	frappe.has_permission("Address", "create", throw=True)
+	require_permission(SETTINGS, "write")
+	require_permission("Company", "read", doc=company)
+	require_permission("Address", "create")
 
 	doc = frappe.new_doc("Address")
 	doc.update(_address_values(values))
@@ -512,8 +513,8 @@ def update_company_address(company: str, address: str, values: dict | str):
 	Scoped to the company's linked addresses so this cannot be used as a general
 	"write any Address" endpoint on the strength of a TaxJar Settings permission.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
-	frappe.has_permission("Address", "write", doc=address, throw=True)
+	require_permission(SETTINGS, "write")
+	require_permission("Address", "write", doc=address)
 
 	if address not in company_address_names(company):
 		frappe.throw(
@@ -547,8 +548,8 @@ def verify_company_address(company: str, address: str):
 	through the same _validate_address_with_taxjar(), so the verdict, the
 	logging and the country guard are identical.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
-	frappe.has_permission("Address", "read", doc=address, throw=True)
+	require_permission(SETTINGS, "write")
+	require_permission("Address", "read", doc=address)
 
 	from taxjar_integration.taxjar_integration.taxjar_integration import (
 		_validate_address_with_taxjar,
@@ -587,7 +588,7 @@ def save_features(company_flags: list | str | None = None):
 	turning individual company flags off does not imply the user wants TaxJar
 	off everywhere, so that stays a deliberate action on the TaxJar Settings
 	form."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	company_flags = (
 		frappe.parse_json(company_flags) if isinstance(company_flags, str) else (company_flags or [])
@@ -628,7 +629,7 @@ def remove_company(company: str):
 	company_config row and its nexus regions — so it disappears from every later
 	step too rather than leaving an orphaned config with no credential behind
 	it."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	# Read and save inside the lock: two writers of this Single at once deadlock
 	# in the database rather than queue (see SETTINGS_WRITE_LOCK).
@@ -650,7 +651,7 @@ def fetch_nexus():
 	"""Pull nexus regions from TaxJar for every configured company (wraps the
 	doctype's own update_nexus_list, which also saves) and return them grouped
 	by company, same shape as get_setup_state()'s nexus_by_company."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	settings = frappe.get_single(SETTINGS)
 	if not settings.company_config:
@@ -673,7 +674,7 @@ def finish_setup():
 	"""Mark setup complete. Saving runs the doctype's own validate(), so an
 	incomplete/invalid configuration surfaces its error instead of being marked done.
 	"""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	# The Activate button reaches here. The Nexus step it sits on starts a nexus
 	# sync as it opens, and that sync rewrites the same record this save

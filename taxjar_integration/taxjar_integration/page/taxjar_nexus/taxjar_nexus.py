@@ -14,6 +14,8 @@ itself, before it loads anything.
 
 import frappe
 
+from taxjar_integration.taxjar_integration.access import require_permission
+
 SETTINGS = "TaxJar Settings"
 
 
@@ -41,7 +43,7 @@ def _summary(settings):
 
 @frappe.whitelist()
 def get_summary():
-	frappe.has_permission(SETTINGS, "read", throw=True)
+	require_permission(SETTINGS, "read")
 
 	return _summary(frappe.get_single(SETTINGS))
 
@@ -51,7 +53,7 @@ def update_nexus_list():
 	"""The page's "Update Nexus List" button. update_nexus_list() checks write
 	permission itself and saves, so the reloaded summary below reflects what
 	TaxJar just returned."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 	settings = frappe.get_single(SETTINGS)
 	settings.update_nexus_list()
 
@@ -63,7 +65,7 @@ def refresh_product_tax_categories():
 	"""The page's "Update Product Tax Category List" button. Same delegation as
 	update_nexus_list above - the doctype method checks write permission and
 	turns a TaxJar error into a readable message."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 	settings = frappe.get_single(SETTINGS)
 	settings.refresh_product_tax_categories()
 
