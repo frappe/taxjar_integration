@@ -14,6 +14,7 @@ import { vi } from "vitest";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "../../..");
 const JS_ROOT = path.join(APP_ROOT, "taxjar_integration/public/js");
+const TELEMETRY_PATH = path.join(JS_ROOT, "telemetry.js");
 const UTILS_PATH = path.join(JS_ROOT, "taxjar_utils.js");
 const DESK_SIDEBAR_PATH = path.join(JS_ROOT, "desk_sidebar.js");
 const SETTINGS_PATH = path.join(
@@ -34,6 +35,7 @@ const FORM_SCRIPTS = {
 
 // Read once. The source never changes inside a run, and each load evaluates it
 // again in a fresh function scope.
+const TELEMETRY_SOURCE = fs.readFileSync(TELEMETRY_PATH, "utf8");
 const UTILS_SOURCE = fs.readFileSync(UTILS_PATH, "utf8");
 const DESK_SIDEBAR_SOURCE = fs.readFileSync(DESK_SIDEBAR_PATH, "utf8");
 const SETTINGS_SOURCE = fs.readFileSync(SETTINGS_PATH, "utf8");
@@ -192,6 +194,8 @@ function badge_html(opts = {}) {
 export function install_desk() {
 	const frappe = {
 		xcall: vi.fn(() => Promise.resolve(null)),
+		// Telemetry off, so taxjar_integration.track sends nothing.
+		boot: { enable_telemetry: false },
 		msgprint: vi.fn(),
 		msg_dialog: { hide: vi.fn() },
 		new_doc: vi.fn(),
@@ -295,6 +299,9 @@ export function install_desk() {
 export function load_taxjar_utils() {
 	delete window.taxjar_integration;
 	delete globalThis.taxjar_integration;
+	// The bundle loads telemetry.js first, and taxjar_utils.js calls its track.
+	// eslint-disable-next-line no-new-func
+	new Function(TELEMETRY_SOURCE)();
 	// eslint-disable-next-line no-new-func
 	new Function(UTILS_SOURCE)();
 	return window.taxjar_integration;
