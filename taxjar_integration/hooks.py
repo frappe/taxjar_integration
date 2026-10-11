@@ -210,6 +210,10 @@ scheduler_events = {
 		"taxjar_integration.taxjar_integration.tasks.purge_old_api_logs",
 		"taxjar_integration.taxjar_integration.tasks.sync_nexus_list",
 	],
+	# The long queue, so the snapshot's count queries never delay short jobs.
+	"daily_long": [
+		"taxjar_integration.taxjar_integration.feature_state.capture_feature_state",
+	],
 	"weekly": [
 		"taxjar_integration.taxjar_integration.tasks.sync_product_tax_categories",
 	],
@@ -257,6 +261,12 @@ scheduler_events = {
 # It is configuration, and it outlives the transactions, so it is ignored here
 # alongside ERPNext's own Mode of Payment Account / Item Default / Party
 # Account entries.
+# frappe.clear_cache() empties the site cache, and many ordinary actions call it
+# (a saved setting, a migrate, a site default). The analytics counters wait in
+# the cache for the daily snapshot, so they must survive it, as the Pulse queue
+# does in Frappe's own list.
+persistent_cache_keys = ["taxjar_telemetry_counts:*"]
+
 company_data_to_be_ignored = [
 	"TaxJar API Credential",
 	"TaxJar Company Config",

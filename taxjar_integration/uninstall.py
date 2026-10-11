@@ -26,6 +26,7 @@ from taxjar_integration.taxjar_integration.regional.united_states import (
 	_US_DEFAULT_TEMPLATE_TITLES,
 	TAXJAR_TEMPLATE_TITLE,
 )
+from taxjar_integration.taxjar_integration.telemetry import capture
 
 # Every Property Setter make_custom_fields() and its two helpers create, as
 # (doctype, fieldname, property). Deleting a Property Setter reverts the field
@@ -39,6 +40,9 @@ _PROPERTY_SETTERS = [
 
 
 def before_uninstall():
+	# First, while the app's own code is still in place. Frappe's delivery job
+	# sends the queued event after the app is gone.
+	capture("taxjar_app_uninstalled")
 	restore_default_tax_templates()
 
 

@@ -71,9 +71,12 @@ from taxjar_integration.taxjar_integration.regional.united_states import (
 # so a Property Setter added to install later cannot reach one of the paths that undo it
 # and miss the other.
 from taxjar_integration.uninstall import _PROPERTY_SETTERS, restore_default_tax_templates
+from taxjar_integration.taxjar_integration.telemetry import capture
 
 
 def before_disable():
+	# First, while the app's own code is still in place.
+	capture("taxjar_app_disabled")
 	# The templates first, the same order uninstall.py splits its two hooks in: the
 	# hand-back is the half that reads this app's own doctypes.
 	restore_default_tax_templates()

@@ -16069,7 +16069,8 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 		last step that holds fields cannot activate without storing them."""
 		on_next = self._fn("_on_next() {")
 		self.assertIn("this.cur === LAST_WIZARD_STEP ? this._finish() : this._advance()", on_next)
-		self.assertIn("Promise.resolve(saver.call(this)).then((ok) => { if (ok) done(); });", on_next)
+		self.assertIn("Promise.resolve(saver.call(this)).then(", on_next)
+		self.assertIn("(ok) => (ok ? done() : this._track_step_failed(step.key))", on_next)
 		self.assertNotIn('step.key === "review"', on_next)
 
 	def test_activation_moves_to_the_summary_only_once_the_flag_lands(self):

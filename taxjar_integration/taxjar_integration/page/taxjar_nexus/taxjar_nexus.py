@@ -15,6 +15,7 @@ itself, before it loads anything.
 import frappe
 
 from taxjar_integration.taxjar_integration.access import require_permission
+from taxjar_integration.taxjar_integration.telemetry import capture
 
 SETTINGS = "TaxJar Settings"
 
@@ -57,6 +58,7 @@ def update_nexus_list():
 	settings = frappe.get_single(SETTINGS)
 	settings.update_nexus_list()
 
+	capture("taxjar_nexus_refreshed")
 	return _summary(settings)
 
 
@@ -69,4 +71,5 @@ def refresh_product_tax_categories():
 	settings = frappe.get_single(SETTINGS)
 	settings.refresh_product_tax_categories()
 
+	capture("taxjar_categories_refreshed")
 	return _summary(settings)

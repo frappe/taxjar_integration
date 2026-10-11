@@ -5,6 +5,7 @@ import traceback
 import unicodedata
 from dataclasses import dataclass
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import frappe
 import taxjar
@@ -20,6 +21,13 @@ from erpnext import get_region
 from erpnext.setup.utils import get_exchange_rate
 
 from taxjar_integration.taxjar_integration.access import require_permission
+from taxjar_integration.taxjar_integration.telemetry import (
+	capture,
+	capture_once,
+	count_api_call,
+	count_sync_error,
+	days_since_setup,
+)
 
 # ISO 3166-2 region names, in the order the State Code select offers them (by
 # state name, not by code). The same two maps, with the same values, are
@@ -248,7 +256,11 @@ def _taxjar_responder(response):
 	Normalising here, where every client is built, means all thirteen endpoints
 	raise the TaxJarResponseError that TaxJar would have caused had it sent the
 	status code it put in the body.
+
+	Every call that reaches TaxJar passes here, so this is also where the
+	analytics count calls to the live API (see _count_api_call).
 	"""
+	_count_api_call(response)
 	if 200 <= response.status_code < 400:
 		try:
 			body = response.json()
@@ -263,6 +275,40 @@ def _taxjar_responder(response):
 			TaxJarResponse.raise_response_error(body)
 
 	return TaxJarResponse.from_request(response)
+
+
+# The resources with create, update, delete and read calls, by path prefix.
+_API_RESOURCES = {"transactions/orders": "order", "transactions/refunds": "refund", "customers": "customer"}
+_API_VERBS = {"POST": "create", "PUT": "update", "DELETE": "delete", "GET": "read"}
+_API_ENDPOINTS = {
+	"taxes": "tax_calculation",
+	"addresses/validate": "address_validation",
+	"nexus/regions": "nexus_regions",
+	"categories": "categories",
+}
+
+
+def _count_api_call(response):
+	"""Count a call to the live API by type. Sandbox calls are tests, and TaxJar does not bill them."""
+	try:
+		request = response.request
+		if urlparse(request.url).hostname == urlparse(taxjar.DEFAULT_API_URL).hostname:
+			count_api_call(_api_call_type(request.method, request.url))
+	except Exception:
+		# Analytics must never change how a TaxJar response is handled.
+		pass
+
+
+def _api_call_type(method, url):
+	"""The API_CALL_TYPES name of one request. Never the ID in its path: an ID is a document name."""
+	path = urlparse(url).path.removeprefix("/v2/").strip("/")
+	if path in _API_ENDPOINTS:
+		return _API_ENDPOINTS[path]
+	for prefix, resource in _API_RESOURCES.items():
+		if path == prefix or path.startswith(prefix + "/"):
+			verb = _API_VERBS.get(method)
+			return f"{resource}_{verb}" if verb else "other"
+	return "other"
 
 
 def _build_client(cred, token_field, api_url):
@@ -618,7 +664,9 @@ def resync_transaction(invoice_name: str):
 			title=_("Filing Is Off"),
 		)
 
-	return sync_transaction_to_taxjar(invoice_name)
+	result = sync_transaction_to_taxjar(invoice_name)
+	capture("taxjar_transactions_resynced", source="form", count=1)
+	return result
 
 
 def sync_transaction_to_taxjar(invoice_name):
@@ -877,6 +925,8 @@ def _set_sync_status(invoice_name, status, error=None, retryable=False, exclusio
 	)
 
 	frappe.db.set_value("Sales Invoice", invoice_name, fields, update_modified=False)
+	if status == "Synced":
+		capture_once("taxjar_first_invoice_synced", days_since_setup=days_since_setup())
 	frappe.publish_realtime(
 		"taxjar_invoice_sync_update",
 		{"taxjar_sync_status": status},
@@ -900,7 +950,24 @@ def _record_sync_failure(err, action, payload, ctx, invoice_name):
 	log_taxjar_call(action=action, status="error", payload=payload, error=info["log_detail"], context=ctx)
 	if info["kind"] == "unknown":
 		_get_taxjar_logger().error(info["log_detail"])
+	count_sync_error("invoice", _sync_error_reason(info))
 	_set_sync_status(invoice_name, "Failed", error=info["message"], retryable=info["retryable"])
+
+
+def _sync_error_reason(info):
+	"""The reason that the analytics count a failed sync under (SYNC_ERROR_REASONS)."""
+	if info["kind"] != "response":
+		return info["kind"]
+	status = cint(info.get("status"))
+	if status in (401, 403):
+		return "auth"
+	if status == 429:
+		return "rate_limited"
+	if status >= 500:
+		return "server_error"
+	if status in (400, 404, 409, 422):
+		return "rejected"
+	return "response_other"
 
 
 def _get_transaction_date(doc):
@@ -926,6 +993,7 @@ def _get_usd_exchange_rate(doc):
 	txn_date = _get_transaction_date(doc)
 	rate = flt(get_exchange_rate(currency, "USD", txn_date, args="for_selling"))
 	if not rate:
+		capture("taxjar_document_blocked", reason="exchange_rate_missing")
 		frappe.throw(
 			_("Could not find exchange rate from {0} to USD for {1}. "
 			  "Please add it in Currency Exchange or configure Currency Exchange Settings."
@@ -1555,6 +1623,7 @@ def set_sales_tax(doc, method):
 			# keep the old value. The empty string clears it.
 			tax_source=(tax_data.tax_source or ""),
 		)
+		capture_once("taxjar_first_tax_calculated", days_since_setup=days_since_setup())
 
 		doc.run_method("calculate_taxes_and_totals")
 		doc.run_method("set_total_in_words")
@@ -1673,6 +1742,7 @@ def validate_taxable_destination(doc, method=None):
 		return
 
 	if not doc.get("shipping_address_name") and not doc.get("customer_address"):
+		capture("taxjar_document_blocked", reason="destination_required")
 		frappe.throw(
 			_(
 				"{0} files its transactions to TaxJar, which needs a destination. "
@@ -1707,6 +1777,7 @@ def validate_return_against(doc, method):
 		# Keeping them outside _() is the point - a translator never sees an
 		# HTML tag and so cannot break one. ERPNext puts its markup inside the
 		# string instead, which is why the rule never fires there.
+		capture("taxjar_document_blocked", reason="return_reference_missing")
 		# nosemgrep: frappe-missing-translate-function-python
 		frappe.throw(
 			"<b>"
@@ -2426,6 +2497,7 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			payload=tax_dict,
 			error="TaxJar API is unreachable",
 		)
+		capture("taxjar_tax_calculation_failed", kind="connection")
 		frappe.msgprint(
 			_("TaxJar API is unreachable. Tax has not been calculated for this document."),
 			indicator="orange",
@@ -2439,6 +2511,13 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			payload=tax_dict,
 			error=getattr(err, "full_response", str(err)),
 		)
+		full = getattr(err, "full_response", None)
+		capture(
+			"taxjar_tax_calculation_failed",
+			kind="response",
+			status=cint(full.get("status_code")) if isinstance(full, dict) else None,
+			address_side=_address_side_at_fault(err),
+		)
 		message = _linkify_guided_setup(_(sanitize_error_response(err)))
 		note = _address_fault_note(err, address_context)
 		if note:
@@ -2451,6 +2530,7 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			payload=tax_dict,
 			error=traceback.format_exc(),
 		)
+		capture("taxjar_tax_calculation_failed", kind="unexpected")
 		raise
 	else:
 		log_taxjar_call(action="tax_for_order", status="success", payload=tax_dict, response=tax_data)
@@ -3741,6 +3821,7 @@ def _record_customer_sync_failure(err, action, payload, ctx, customer_name):
 	log_taxjar_call(action=action, status="error", payload=payload, error=info["log_detail"], context=ctx)
 	if info["kind"] == "unknown":
 		_get_taxjar_logger().error(info["log_detail"])
+	count_sync_error("customer", _sync_error_reason(info))
 	# Through the retry, not bare: this write sits in the same window the
 	# success write does - the row was read before a call that takes a second -
 	# and it runs precisely when TaxJar is degraded and many rows are being
@@ -3775,7 +3856,9 @@ def resync_customer(customer_name: str, company: str):
 			title=_("Company Not Allowed"),
 		)
 
-	return sync_customer_to_taxjar(customer_name, company=company)
+	result = sync_customer_to_taxjar(customer_name, company=company)
+	capture("taxjar_customers_synced", source="form", count=1)
+	return result
 
 
 def customer_sync_companies(customer_name):

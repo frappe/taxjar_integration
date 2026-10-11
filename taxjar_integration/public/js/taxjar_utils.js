@@ -1029,6 +1029,9 @@ taxjar_integration._show_foreign_tax_rows_dialog = function (frm, rows, ack_hash
 	let settle = function (proceed) {
 		if (resolved) return;
 		resolved = true;
+		taxjar_integration.track("taxjar_extra_charges_answered", {
+			choice: proceed ? "proceed" : "cancel",
+		});
 		if (!proceed) frappe.validated = false;
 		resolve();
 	};

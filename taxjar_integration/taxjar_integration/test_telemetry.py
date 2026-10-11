@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import frappe
 from frappe.tests import IntegrationTestCase
 
 from taxjar_integration.taxjar_integration import telemetry
@@ -8,6 +9,14 @@ FRAPPE_CAPTURE = "taxjar_integration.taxjar_integration.telemetry.frappe_capture
 
 
 class TestTelemetry(IntegrationTestCase):
+	"""Telemetry is off in test runs unless a test asks for it (telemetry._active)."""
+
+	def setUp(self):
+		frappe.flags.taxjar_telemetry_in_test = True
+
+	def tearDown(self):
+		frappe.flags.taxjar_telemetry_in_test = False
+
 	def test_drops_properties_that_are_not_in_the_event_schema(self):
 		properties = telemetry.allowed_properties(
 			"taxjar_csat_submitted", {"survey": "csat", "score": 4, "customer": "Acme Corp"}
@@ -25,12 +34,12 @@ class TestTelemetry(IntegrationTestCase):
 		self.assertEqual(properties, {})
 
 	def test_only_the_survey_comment_accepts_typed_text(self):
-		"""Every other property is a fixed list of values or a boolean."""
+		"""Every other property is a fixed list of values, a boolean or a count."""
 		free_text = {
 			(event, key)
 			for event, schema in telemetry.EVENTS.items()
 			for key, allowed in schema.items()
-			if not (allowed is bool or isinstance(allowed, tuple))
+			if not (allowed in (bool, int) or isinstance(allowed, tuple))
 		}
 		self.assertEqual(free_text, {("taxjar_csat_submitted", "comment")})
 		self.assertIsInstance(telemetry.EVENTS["taxjar_csat_submitted"]["comment"], telemetry.FreeText)
@@ -64,16 +73,33 @@ class TestTelemetry(IntegrationTestCase):
 		with patch(FRAPPE_CAPTURE) as frappe_capture:
 			telemetry.capture("taxjar_csat_shown", survey="csat")
 
-		frappe_capture.assert_called_once_with(
-			"taxjar_csat_shown", "taxjar_integration", user="Administrator", properties={"survey": "csat"}
-		)
+		frappe_capture.assert_called_once()
+		args, kwargs = frappe_capture.call_args
+		self.assertEqual(args, ("taxjar_csat_shown", "taxjar_integration"))
+		self.assertEqual(kwargs["user"], "Administrator")
+		self.assertEqual(kwargs["properties"]["survey"], "csat")
 
 	def test_user_events_carry_the_session_user(self):
 		with patch(FRAPPE_CAPTURE) as frappe_capture:
 			telemetry.capture_for_user("taxjar_csat_shown", survey="csat")
 
 		self.assertEqual(frappe_capture.call_args.kwargs["user"], "Administrator")
-		self.assertEqual(frappe_capture.call_args.kwargs["properties"], {"survey": "csat"})
+		self.assertEqual(frappe_capture.call_args.kwargs["properties"]["survey"], "csat")
+
+	def test_every_event_carries_the_app_and_frappe_versions(self):
+		with patch(FRAPPE_CAPTURE) as frappe_capture:
+			telemetry.capture("taxjar_nexus_refreshed")
+
+		properties = frappe_capture.call_args.kwargs["properties"]
+		self.assertEqual(properties["app_version"], frappe.get_attr("taxjar_integration.__version__"))
+		self.assertEqual(properties["frappe_version"], frappe.__version__)
+
+	def test_a_test_run_sends_nothing_unless_a_test_asks(self):
+		frappe.flags.taxjar_telemetry_in_test = False
+		with patch(FRAPPE_CAPTURE) as frappe_capture:
+			telemetry.capture("taxjar_csat_shown", survey="csat")
+
+		frappe_capture.assert_not_called()
 
 	def test_an_unknown_event_is_not_sent(self):
 		with patch(FRAPPE_CAPTURE) as frappe_capture:

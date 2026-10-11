@@ -1,3 +1,4 @@
+import "./telemetry";
 import "./taxjar_utils";
 import "./desk_sidebar";
 import "./csat_card";

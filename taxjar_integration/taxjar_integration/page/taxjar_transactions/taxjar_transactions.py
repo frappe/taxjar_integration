@@ -20,6 +20,7 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_publish_transaction_update,
 	transaction_exclusion_reason,
 )
+from taxjar_integration.taxjar_integration.telemetry import capture
 
 # A representative TaxJar custom field; if this column is absent the fields were
 # never created, so reads would hit MySQLdb (1054) Unknown column.
@@ -359,6 +360,7 @@ def export_transactions(filters: dict | str | None = None, scope: str = ALL_SCOP
 		total=total,
 		filters=filters,
 	)
+	capture("taxjar_export_downloaded", page="transactions")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -404,6 +406,7 @@ def bulk_retry(invoices: list | str):
 		)
 		queued += 1
 
+	capture("taxjar_transactions_resynced", source="bulk", count=queued)
 	return {"queued": queued}
 
 

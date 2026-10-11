@@ -24,6 +24,7 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_publish_customer_update,
 	_restrict_companies,
 )
+from taxjar_integration.taxjar_integration.telemetry import capture
 
 # A representative TaxJar custom field; if this column is absent the fields were
 # never created, so reads would hit MySQLdb (1054) Unknown column.
@@ -361,6 +362,7 @@ def export_customers(filters: dict | str | None = None, scope: str = ALL_SCOPE):
 		total=total,
 		filters=filters,
 	)
+	capture("taxjar_export_downloaded", page="customers")
 
 
 def _check_each(customers):
@@ -415,7 +417,9 @@ def configure_exemption(
 	if exemption_type not in _EXEMPTION_TYPES_REQUIRING_REGIONS:
 		regions = []
 
-	return _apply_exemption(customers, exemption_type or "", regions)
+	result = _apply_exemption(customers, exemption_type or "", regions)
+	capture("taxjar_exemption_configured", customers=len(customers), regions=len(regions))
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
@@ -425,7 +429,9 @@ def bulk_clear_exemption(customers: list | str):
 	customers = parse_document_names(customers, label=frappe._("customers"))
 	_check_each(customers)
 
-	return _apply_exemption(customers, "", [])
+	result = _apply_exemption(customers, "", [])
+	capture("taxjar_exemption_cleared", customers=len(customers))
+	return result
 
 
 # Above this many customers the edit goes to a background job. Each one is a full
@@ -541,4 +547,5 @@ def bulk_sync_to_taxjar(customers: list | str):
 			_enqueue_customer_sync(name, company)
 		queued += 1
 
+	capture("taxjar_customers_synced", source="bulk", count=queued)
 	return {"queued": queued}

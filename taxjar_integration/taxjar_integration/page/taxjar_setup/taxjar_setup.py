@@ -39,6 +39,11 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_validate_address_with_taxjar,
 	company_address_names,
 )
+from taxjar_integration.taxjar_integration.telemetry import (
+	capture,
+	capture_once,
+	record_setup_finished,
+)
 
 SETTINGS = "TaxJar Settings"
 
@@ -92,6 +97,8 @@ def get_setup_state():
 	# token. The last 4 characters are there for the Manager who does, so a
 	# reader gets none and the token is not even decrypted for them.
 	can_manage = frappe.has_permission(SETTINGS, "write")
+	if can_manage and not settings.setup_complete:
+		capture_once("taxjar_setup_started")
 
 	credentials = [
 		{
@@ -166,6 +173,7 @@ def test_connection(company: str, token: str | None = None, mode: str | None = N
 				break
 
 	if not api_key:
+		_connection_tested("no_token", mode)
 		return {"ok": False, "message": _("Enter a token to test.")}
 
 	api_url = taxjar.SANDBOX_API_URL if is_sandbox else taxjar.DEFAULT_API_URL
@@ -178,15 +186,24 @@ def test_connection(company: str, token: str | None = None, mode: str | None = N
 		full = getattr(err, "full_response", None) or {}
 		status = full.get("status_code") if isinstance(full, dict) else None
 		if status == 401:
+			_connection_tested("invalid_token", mode)
 			return {"ok": False, "message": _("Invalid token (401). Check you copied the {0} token.").format(mode)}
+		_connection_tested("rejected", mode)
 		return {"ok": False, "message": _("TaxJar rejected the request.")}
 	except taxjar.exceptions.TaxJarConnectionError:
+		_connection_tested("unreachable", mode)
 		return {"ok": False, "message": _("Could not reach TaxJar. Check your connection and try again.")}
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "TaxJar: test_connection failed")
+		_connection_tested("error", mode)
 		return {"ok": False, "message": _("Something went wrong testing this connection.")}
 
+	_connection_tested("ok", mode)
 	return {"ok": True, "company": company, "mode": mode}
+
+
+def _connection_tested(result, mode):
+	capture("taxjar_setup_connection_tested", result=result, api_mode=(mode or "Live").lower())
 
 
 @frappe.whitelist(methods=["POST"])
@@ -260,6 +277,7 @@ def save_connection(
 
 		settings.save()
 
+	capture("taxjar_setup_step_completed", step="connect")
 	return {"ok": True}
 
 
@@ -303,6 +321,7 @@ def save_company_accounts(rows: list | str):
 
 		settings.save()
 
+	capture("taxjar_setup_step_completed", step="accounts")
 	return {"ok": True}
 
 
@@ -476,6 +495,7 @@ def save_company_address(rows: list | str):
 		if company and address:
 			_set_preferred_billing(company, address)
 
+	capture("taxjar_setup_step_completed", step="address")
 	return {"ok": True}
 
 
@@ -556,10 +576,18 @@ def verify_company_address(company: str, address: str):
 	doc = frappe.get_doc("Address", address)
 	# Returns None when the company has no usable credential for the current API
 	# mode; say which of the two it is rather than passing None to the client.
-	return _validate_address_with_taxjar(doc, company) or {
+	verdict = _validate_address_with_taxjar(doc, company) or {
 		"checked": False,
 		"reason": "no_credential",
 	}
+	capture("taxjar_setup_address_verified", result=_address_result(verdict))
+	return verdict
+
+
+def _address_result(verdict):
+	if verdict.get("checked"):
+		return "valid" if verdict.get("valid") else "not_found"
+	return verdict.get("reason")
 
 
 @frappe.whitelist(methods=["POST"])
@@ -618,6 +646,7 @@ def save_features(company_flags: list | str | None = None):
 
 		settings.save()
 
+	capture("taxjar_setup_step_completed", step="features")
 	return {"ok": True}
 
 
@@ -641,6 +670,7 @@ def remove_company(company: str):
 		settings.set("nexus", [n for n in (settings.nexus or []) if n.company != company])
 		settings.save()
 
+	capture("taxjar_company_removed")
 	return {"ok": True}
 
 
@@ -660,6 +690,7 @@ def fetch_nexus():
 
 	settings.update_nexus_list()
 
+	capture("taxjar_setup_step_completed", step="nexus")
 	return {
 		"ok": True,
 		"nexus_by_company": _nexus_by_company(settings),
@@ -683,4 +714,21 @@ def finish_setup():
 		settings.setup_complete = 1
 		settings.save()
 
+	record_setup_finished()
+	_setup_finished(settings)
 	return {"ok": True, "setup_complete": True}
+
+
+def _setup_finished(settings):
+	configs = settings.company_config or []
+	capture(
+		"taxjar_setup_finished",
+		api_mode=(settings.api_mode or "Live").lower(),
+		companies=len(configs),
+		calculate_tax_companies=sum(1 for c in configs if c.taxjar_calculate_tax),
+		create_transactions_companies=sum(1 for c in configs if c.taxjar_create_transactions),
+		include_exports_companies=sum(
+			1 for c in configs if c.taxjar_create_transactions and c.taxjar_include_exports
+		),
+		nexus_regions=len(settings.nexus or []),
+	)

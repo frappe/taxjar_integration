@@ -290,7 +290,13 @@ class TaxJarSetup {
 		Promise.resolve(this._nexus_fetch).then(() => {
 			$btn.removeAttr("aria-busy");
 			if (!saver) return done();
-			return Promise.resolve(saver.call(this)).then((ok) => { if (ok) done(); });
+			return Promise.resolve(saver.call(this)).then(
+				(ok) => (ok ? done() : this._track_step_failed(step.key)),
+				(error) => {
+					this._track_step_failed(step.key);
+					throw error;
+				}
+			);
 		}).finally(() => { this._nextBusy = false; });
 	}
 
@@ -389,6 +395,21 @@ class TaxJarSetup {
 
 		this.$body.empty();
 		this[`_render_${step.key}`]();
+		this._track_step_view(step.key);
+	}
+
+	// Analytics for the setup funnel. A view counts once per step change, and
+	// only while setup is not finished: a finished setup opens on the summary
+	// each time, which is not a step of the funnel.
+	_track_step_view(key) {
+		if (this.state?.setup_complete || this._viewed_step === key) return;
+		this._viewed_step = key;
+		taxjar_integration.track("taxjar_setup_step_viewed", { step: key });
+	}
+
+	// A step that did not save: the user stays on it and sees why.
+	_track_step_failed(key) {
+		taxjar_integration.track("taxjar_setup_step_failed", { step: key });
 	}
 
 	// Sealed once setup is complete and the user is standing on the summary.

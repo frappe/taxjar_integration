@@ -19,7 +19,8 @@ class TaxJarCsat {
 
 	/** Add the card when the sidebar of this app shows and the survey is due. */
 	render(sidebar) {
-		if (!taxjar_integration.is_taxjar_sidebar(sidebar)) return;
+		// With telemetry off the server never asks, so skip the request.
+		if (!frappe.boot.enable_telemetry || !taxjar_integration.is_taxjar_sidebar(sidebar)) return;
 
 		this.load().then(() => {
 			if (this.prompt && this.prompt.show) this.add_card(sidebar);
