@@ -471,10 +471,7 @@ class TaxJarSetup {
 			</ul>
 		`);
 
-		// In a dialog here: the checklist under this card is what the video
-		// introduces, and a player that grew inside the row pushed it off the
-		// screen for as long as it ran.
-		this._bind_setup_video({ dialog: true });
+		this._bind_setup_video();
 	}
 
 	// Sandbox/Live as a segmented single-select (frappe.ui.tab_buttons) rather
@@ -2285,8 +2282,8 @@ class TaxJarSetup {
 	// yet, and the activated screen offers the same video to somebody whose
 	// setup already runs.
 	//
-	// The words and the player are all that differ. The markup, the facade, the
-	// thumbnail fallback and the rules stay here, so the rest cannot drift.
+	// The words are all that differ. The markup, the facade, the thumbnail
+	// fallback, the player and the rules stay here, so the rest cannot drift.
 	//
 	// A facade, not an embed: one image from i.ytimg.com, and nothing from
 	// youtube.com loads for somebody who never presses play. No duration in the
@@ -2314,12 +2311,9 @@ class TaxJarSetup {
 		`;
 	}
 
-	// dialog: true opens the video over the page. Without it the row becomes
-	// the player, which is how the activated screen has always shown it.
-	_bind_setup_video({ dialog } = {}) {
-		this.$body.find(".ts-video-play").on("click", () =>
-			dialog ? this._play_setup_video_in_dialog() : this._play_setup_video_in_row()
-		);
+	// Both places play the video in the row itself.
+	_bind_setup_video() {
+		this.$body.find(".ts-video-play").on("click", () => this._play_setup_video_in_row());
 		// Bound here rather than an inline onerror="" attribute, like every other
 		// handler on this page. Safe to bind after inserting the <img>: the
 		// browser cannot fire error before this synchronous block returns.
@@ -2334,9 +2328,6 @@ class TaxJarSetup {
 	// The row becomes the player. A 168x96 frame is a thumbnail, not something
 	// anybody can watch, so the card drops its side-by-side layout and gives the
 	// video the width - the description has done its job once the video runs.
-	//
-	// The activated screen's player. Nothing sits under this card there, so a
-	// row that grows moves nothing the reader was using.
 	_play_setup_video_in_row() {
 		const $video = this.$body.find(".ts-video").addClass("is-playing");
 		const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(SETUP_VIDEO_ID)}?autoplay=1&rel=0`;
@@ -2351,46 +2342,5 @@ class TaxJarSetup {
 				></iframe>
 			</div>
 		`);
-	}
-
-	// The first step's player: a dialog, over the page. What sits under that
-	// card is the checklist the video introduces, and a player that grew inside
-	// the row pushed it off the screen for as long as it ran.
-	//
-	// frappe's own dialog, so the cross, the backdrop, the Escape key and the
-	// focus trap are the desk's and not this page's.
-	//
-	// Built on each press and removed on close: a hidden dialog keeps its DOM,
-	// and an iframe left inside one goes on playing with nothing on screen to
-	// stop it. Removing it is also what makes the next press start the video
-	// from the top.
-	_play_setup_video_in_dialog() {
-		const dialog = new frappe.ui.Dialog({
-			title: __("TaxJar walkthrough"),
-			size: "large",
-			fields: [{ fieldtype: "HTML", fieldname: "player" }],
-		});
-
-		// frappe appends a dialog to <body>, outside .taxjar-setup - so the
-		// player's rules cannot be scoped to this page like the rest of its
-		// css. This class is what they hang off instead.
-		dialog.$wrapper.addClass("ts-video-dialog");
-
-		const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(SETUP_VIDEO_ID)}?autoplay=1&rel=0`;
-		dialog.fields_dict.player.$wrapper.html(`
-			<div class="ts-video-frame">
-				<iframe
-					src="${src}"
-					title="${__("TaxJar walkthrough")}"
-					allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-					referrerpolicy="strict-origin-when-cross-origin"
-					allowfullscreen
-				></iframe>
-			</div>
-		`);
-
-		// hidden, not hide: the wrapper has to outlive the closing animation.
-		dialog.$wrapper.on("hidden.bs.modal", () => dialog.$wrapper.remove());
-		dialog.show();
 	}
 }

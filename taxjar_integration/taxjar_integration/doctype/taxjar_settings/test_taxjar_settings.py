@@ -16453,8 +16453,7 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 		card = self._fn("_video_card({ title, description }) {")
 		self.assertIn("SETUP_VIDEO_POSTER", card)
 		self.assertNotIn("youtube-nocookie.com", card)
-		for player in ("_play_setup_video_in_row() {", "_play_setup_video_in_dialog() {"):
-			self.assertIn("youtube-nocookie.com", self._fn(player))
+		self.assertIn("youtube-nocookie.com", self._fn("_play_setup_video_in_row() {"))
 		# No duration in either label: the video can be re-cut without a line
 		# going quietly wrong, and a wrong duration is worse than none.
 		js = self._js()
@@ -16462,38 +16461,17 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 			self.assertIn(label, js)
 			self.assertNotIn("min", js.split(label)[1].split("),")[0])
 
-	def test_the_first_step_plays_the_walkthrough_over_the_page(self):
-		"""A dialog there, so the checklist under the card stays where it is
-		while the video runs - that checklist is what the video introduces.
-		frappe's dialog brings the cross, the backdrop and Escape.
-
-		The wrapper is removed on close. A hidden dialog keeps its DOM, and an
-		iframe left inside one goes on playing with nothing on screen to stop
-		it."""
-		play = self._fn("_play_setup_video_in_dialog() {")
-		self.assertIn("new frappe.ui.Dialog({", play)
-		self.assertIn('dialog.$wrapper.on("hidden.bs.modal", () => dialog.$wrapper.remove());', play)
-		# The dialog lands outside .taxjar-setup, so the player's rules hang off
-		# a class of their own rather than the page's scope.
-		self.assertIn('dialog.$wrapper.addClass("ts-video-dialog");', play)
-		self.assertIn(".ts-video-dialog .ts-video-frame {", self._setup_css())
-
-	def test_the_activated_screen_plays_the_walkthrough_in_the_row(self):
-		"""Unchanged, and deliberately not the dialog: nothing sits under that
-		card, so a row that grows moves nothing the reader was using."""
+	def test_both_places_play_the_walkthrough_in_the_row(self):
+		"""The first step and the activated screen play the video the same way:
+		the row becomes the player. No dialog is left in the code."""
 		play = self._fn("_play_setup_video_in_row() {")
 		self.assertIn('addClass("is-playing")', play)
 		self.assertIn(".taxjar-setup .ts-video.is-playing {", self._setup_css())
-		self.assertNotIn("frappe.ui.Dialog", play)
-
-	def test_each_place_picks_its_own_player(self):
-		"""One binder, one flag. The first step asks for the dialog; the
-		activated screen takes the row, which is what it has always done."""
-		binder = self._fn("_bind_setup_video({ dialog } = {}) {")
-		self.assertIn(
-			"dialog ? this._play_setup_video_in_dialog() : this._play_setup_video_in_row()", binder
-		)
-		self.assertIn("this._bind_setup_video({ dialog: true });", self._fn("_render_welcome() {"))
+		binder = self._fn("_bind_setup_video() {")
+		self.assertIn("this._play_setup_video_in_row()", binder)
+		self.assertIn("this._bind_setup_video();", self._fn("_render_welcome() {"))
+		self.assertNotIn("_play_setup_video_in_dialog", self._js())
+		self.assertNotIn("ts-video-dialog", self._setup_css())
 
 	def test_the_walkthrough_opens_the_first_step_and_the_activated_screen(self):
 		"""One card, drawn by one method, in the two places a reader meets this

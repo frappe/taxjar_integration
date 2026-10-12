@@ -538,9 +538,8 @@
 .taxjar-setup .ts-video-title { margin: 0 0 4px; font-size: var(--text-md); font-weight: 600; }
 .taxjar-setup .ts-video-desc { margin: 0; font-size: var(--text-base); line-height: 1.5; color: var(--text-muted); }
 
-/* Playing on the activated screen: the frame takes the row and the description
-   drops away. A 168x96 player is a thumbnail, not something anybody can watch.
-   Nothing sits under that card, so a row that grows moves nothing. */
+/* Playing: the frame takes the row and the description drops away. A 168x96
+   player is a thumbnail, not something anybody can watch. */
 .taxjar-setup .ts-video.is-playing { flex-direction: column; align-items: stretch; gap: 0; }
 .taxjar-setup .ts-video.is-playing .ts-video-text { display: none; }
 .taxjar-setup .ts-video-frame {
@@ -548,20 +547,6 @@
 	border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); overflow: hidden;
 }
 .taxjar-setup .ts-video-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
-
-/* Playing on the first step: a dialog over the page, so the checklist under the
-   card stays where it is.
-
-   These two rules are the only ones in this file outside .taxjar-setup, and
-   they have to be: frappe appends a dialog to <body>, where the page's own
-   scope does not reach. _play_setup_video_in_dialog puts .ts-video-dialog on
-   the wrapper for them to hang off. */
-.ts-video-dialog .ts-video-frame {
-	width: 100%; aspect-ratio: 16 / 9;
-	border-radius: var(--radius-md, 8px); overflow: hidden;
-	background: #000;
-}
-.ts-video-dialog .ts-video-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
 
 /* ── The configuration record ────────────────────────────────────────────
    One Connection card for the site settings. Then a "Companies" heading and
