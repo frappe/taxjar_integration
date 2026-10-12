@@ -191,7 +191,8 @@ function _legacy_run_action(frm, state) {
 	// Why the button is disabled. A disabled button gets no pointer events,
 	// so the tooltip sits on a wrapper around it.
 	let reason = '';
-	if (!live) reason = __('Change API Mode to Live in TaxJar Setup to run the check.');
+	if (!frm.perm?.[0]?.write) reason = __('A TaxJar Manager can run the check.');
+	else if (!live) reason = __('Change API Mode to Live in TaxJar Setup to run the check.');
 	else if (running) reason = __('The check runs in the background. You can leave this page.');
 	else if (!state.pending) reason = __('Every invoice from before the upgrade is checked.');
 
@@ -306,7 +307,7 @@ function _legacy_companies_table(frm, state) {
 		`).appendTo($body);
 		$row.find('td').first().text(row.company);
 
-		const open = (tab) => _open_transactions(row.company, first_month, state.cutoff_date, tab);
+		const open = (tab) => _open_transactions(row.company, tab);
 		$row.find('.legacy-found').append(_legacy_count(finished, row.found, () => open('synced')));
 		$row.find('.legacy-not-found').append(
 			_legacy_count(finished, row.not_found, () => open('not_applicable'), 'var(--ink-red-8)')
@@ -395,7 +396,7 @@ function _legacy_alerts(state) {
 		}
 
 		if (!row.pending && (row.not_found || row.cancelled_in_taxjar)) {
-			alerts.push(_legacy_review_alert(state, row));
+			alerts.push(_legacy_review_alert(row));
 		}
 
 		if (row.pending && !row.has_credential) {
@@ -417,8 +418,8 @@ function _legacy_alerts(state) {
 }
 
 // One alert for each company the check flagged, with a button for each list.
-function _legacy_review_alert(state, row) {
-	const open = (tab) => _open_transactions(row.company, row.first_month, state.cutoff_date, tab);
+function _legacy_review_alert(row) {
+	const open = (tab) => _open_transactions(row.company, tab);
 	const $buttons = $('<div></div>').css({ display: 'flex', 'flex-wrap': 'wrap', gap: 'var(--margin-sm)' });
 	const button = (label, tab) => frappe.ui.button({
 		label, icon: 'external-link', size: 'sm', variant: 'outline', onclick: () => open(tab),
@@ -466,11 +467,11 @@ function _open_setup_connection() {
 	frappe.set_route('taxjar-setup');
 }
 
-function _open_transactions(company, first_month, cutoff_date, tab) {
-	// set_route writes these into the URL, where an undefined value would
-	// arrive as the word "undefined".
-	frappe.route_options = { company, to_date: cutoff_date, tab };
-	if (first_month) frappe.route_options.from_date = `${first_month}-01`;
+function _open_transactions(company, tab) {
+	// pre_upgrade keeps the invoices the check answered. A date range cannot:
+	// the check groups invoices by creation month, and the page filters on
+	// posting date.
+	frappe.route_options = { company, tab, pre_upgrade: 1 };
 	frappe.set_route('taxjar-transactions');
 }
 

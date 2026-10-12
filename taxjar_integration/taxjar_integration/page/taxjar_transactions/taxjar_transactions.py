@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.exporting import send_xlsx
@@ -16,7 +17,10 @@ from taxjar_integration.taxjar_integration.pagination import (
 )
 from taxjar_integration.taxjar_integration.taxjar_integration import (
 	DOMESTIC_NATURE,
+	EXCLUSION_LEGACY_NOT_FOUND,
+	EXCLUSION_LEGACY_UNCHECKED,
 	EXPORT_NATURE,
+	LEGACY_PROVIDER,
 	_publish_transaction_update,
 	transaction_exclusion_reason,
 )
@@ -108,15 +112,16 @@ def get_transactions(
 	page_size = parse_page_size(page_size)
 
 	conditions = _build_conditions(filters, scope)
+	or_filters = _pre_upgrade_filters(filters)
 
-	total = permitted_count("Sales Invoice", conditions)
+	total = permitted_count("Sales Invoice", conditions, or_filters)
 	page = clamp_page(page, total, page_size)
-	invoices = _fetch_invoices(conditions, scope, (page - 1) * page_size, page_size)
+	invoices = _fetch_invoices(conditions, scope, (page - 1) * page_size, page_size, or_filters=or_filters)
 
 	return paginated_response("invoices", invoices, total, page, page_size)
 
 
-def _fetch_invoices(conditions, scope, start, page_size, truncate_errors=True):
+def _fetch_invoices(conditions, scope, start, page_size, truncate_errors=True, or_filters=None):
 	"""One window of the table, with everything the table adds to a raw row.
 
 	Shared by the paginated read and the export, so the sheet holds the same
@@ -128,6 +133,7 @@ def _fetch_invoices(conditions, scope, start, page_size, truncate_errors=True):
 	invoices = frappe.get_list(
 		"Sales Invoice",
 		filters=conditions,
+		or_filters=or_filters,
 		fields=[
 			"name", "posting_date", "customer_name", "grand_total", "docstatus",
 			# currency is here for the Grand Total column: it is a Currency
@@ -232,9 +238,11 @@ def get_summary(filters: dict | str | None = None):
 	filters = parse_filters(filters)
 
 	# Aggregate counts in SQL instead of pulling every row into Python.
+	or_filters = _pre_upgrade_filters(filters)
 	rows = frappe.get_list(
 		"Sales Invoice",
 		filters=_build_conditions(filters, SUBMITTED_SCOPE),
+		or_filters=or_filters,
 		fields=["taxjar_sync_status", {"COUNT": "*"}],
 		group_by="taxjar_sync_status",
 	)
@@ -252,7 +260,7 @@ def get_summary(filters: dict | str | None = None):
 			"excluded": by_status.get("Excluded", 0),
 		},
 		"draft": {
-			"total": permitted_count("Sales Invoice", _build_conditions(filters, DRAFT_SCOPE)),
+			"total": permitted_count("Sales Invoice", _build_conditions(filters, DRAFT_SCOPE), or_filters),
 		},
 	}
 
@@ -345,7 +353,8 @@ def export_transactions(filters: dict | str | None = None, scope: str = ALL_SCOP
 
 	filters = parse_filters(filters)
 	conditions = _build_conditions(filters, scope)
-	total = permitted_count("Sales Invoice", conditions)
+	or_filters = _pre_upgrade_filters(filters)
+	total = permitted_count("Sales Invoice", conditions, or_filters)
 
 	send_xlsx(
 		doctype="Sales Invoice",
@@ -355,7 +364,7 @@ def export_transactions(filters: dict | str | None = None, scope: str = ALL_SCOP
 		columns=_export_columns(),
 		# The whole error message, not the 300 characters the popover shows.
 		fetch_rows=lambda start, page_size: _fetch_invoices(
-			conditions, scope, start, page_size, truncate_errors=False
+			conditions, scope, start, page_size, truncate_errors=False, or_filters=or_filters
 		),
 		total=total,
 		filters=filters,
@@ -439,6 +448,27 @@ def _build_conditions(filters, scope=ALL_SCOPE):
 	_add_column_search(conditions, filters)
 
 	return _add_nature_filter(conditions, filters)
+
+
+def _pre_upgrade_filters(filters):
+	"""The OR filters for the pre_upgrade filter, or None when it is off.
+
+	The Migration tab on TaxJar Settings opens this page with pre_upgrade set,
+	to show the invoices that legacy_check.py answered or has still to answer.
+	The page shows no control for it: it holds the flag only until the user
+	leaves the page.
+
+	The check writes LEGACY_PROVIDER on each invoice TaxJar holds, and
+	EXCLUSION_LEGACY_NOT_FOUND on each one TaxJar does not hold. A date filter
+	cannot select them: the check groups invoices by creation month, and this
+	page filters on posting date.
+	"""
+	if not cint(filters.get("pre_upgrade")):
+		return None
+	return [
+		["taxjar_provider", "=", LEGACY_PROVIDER],
+		["taxjar_exclusion_reason", "in", [EXCLUSION_LEGACY_NOT_FOUND, EXCLUSION_LEGACY_UNCHECKED]],
+	]
 
 
 def _add_nature_filter(conditions, filters):

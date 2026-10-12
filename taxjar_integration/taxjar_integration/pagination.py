@@ -105,7 +105,7 @@ def parse_page_size(page_size):
 	return page_size if page_size in PAGE_SIZES else PAGE_SIZE
 
 
-def permitted_count(doctype, filters):
+def permitted_count(doctype, filters, or_filters=None):
 	"""Row count for ``filters`` that respects the caller's permissions.
 
 	frappe.db.count goes straight to the database: it applies no permission
@@ -118,7 +118,7 @@ def permitted_count(doctype, filters):
 	SELECT ("count(name) as total") and asks for {"COUNT": "*"} instead, which
 	comes back keyed "COUNT(*)".
 	"""
-	rows = frappe.get_list(doctype, filters=filters, fields=[{"COUNT": "*"}])
+	rows = frappe.get_list(doctype, filters=filters, or_filters=or_filters, fields=[{"COUNT": "*"}])
 	return next(iter(rows[0].values()), 0) if rows else 0
 
 

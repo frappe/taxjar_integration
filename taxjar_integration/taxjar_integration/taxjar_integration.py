@@ -340,15 +340,15 @@ def _build_client(cred, token_field, api_url):
 	return client
 
 
-def _api_mode(settings):
-	is_sandbox = settings.api_mode == "Sandbox"
+def _api_mode(settings, mode=None):
+	is_sandbox = (mode or settings.api_mode) == "Sandbox"
 	return (
 		"sandbox_token" if is_sandbox else "live_token",
 		taxjar.SANDBOX_API_URL if is_sandbox else taxjar.DEFAULT_API_URL,
 	)
 
 
-def get_client(company: str):
+def get_client(company: str, mode: str | None = None):
 	"""The TaxJar client for one company's own credential.
 
 	``company`` is required. It used to default to None, and the loop below used
@@ -358,9 +358,12 @@ def get_client(company: str):
 	tenant by row order is not a default, so there is no longer one. Where a
 	credential genuinely is not company-specific, say so by calling
 	get_catalogue_client() instead.
+
+	``mode`` is "Live" or "Sandbox", for a caller that must reach one account
+	whatever API Mode says. By default the client follows API Mode.
 	"""
 	settings = frappe.get_single("TaxJar Settings")
-	token_field, api_url = _api_mode(settings)
+	token_field, api_url = _api_mode(settings, mode)
 	cred = next((c for c in (settings.table_hvjw or []) if c.company == company), None)
 	return _build_client(cred, token_field, api_url)
 
@@ -603,6 +606,8 @@ def enqueue_taxjar_delete(doc, method):
 	if _export_is_excluded(doc):
 		return
 
+	_pin_legacy_provider(doc)
+
 	if not get_client(doc.company):
 		# Same treatment as enqueue_taxjar_sync above, for a sharper reason: this
 		# document is quite likely already filed in TaxJar. Returning silently
@@ -818,7 +823,8 @@ def sync_transaction_to_taxjar(invoice_name):
 def delete_transaction_from_taxjar(invoice_name):
 	"""Background worker: delete order/refund from TaxJar for a cancelled Sales Invoice."""
 	doc = frappe.get_doc("Sales Invoice", invoice_name)
-	ctx = {"doctype": "Sales Invoice", "name": invoice_name}
+	ctx = {"doctype": "Sales Invoice", "name": invoice_name, "company": doc.company}
+	_pin_legacy_provider(doc)
 
 	client = get_client(doc.company)
 	if not client:
@@ -831,7 +837,7 @@ def delete_transaction_from_taxjar(invoice_name):
 	is_refund = doc.is_return
 	action = "delete_refund" if is_refund else "delete_order"
 	payload = {"transaction_id": doc.name}
-	provider = _delete_provider(doc)
+	provider = provider_params(doc)
 
 	try:
 		log_taxjar_call(action=action, status="request", payload=payload, context=ctx)
@@ -856,8 +862,8 @@ def delete_transaction_from_taxjar(invoice_name):
 		_record_sync_failure(err, action, payload, ctx, invoice_name)
 
 
-def _delete_provider(doc):
-	"""The provider to delete this invoice's transaction under.
+def _pin_legacy_provider(doc):
+	"""Record LEGACY_PROVIDER on a pre-upgrade invoice that is not checked yet.
 
 	An invoice submitted before the upgrade that legacy_check.py has not
 	answered yet records no provider. This app never filed it: the
@@ -870,10 +876,12 @@ def _delete_provider(doc):
 	removes nothing (verified on the live API, 2026-10-12), so the answer
 	cannot tell the job to try again. The provider has to be right the first
 	time.
+
+	Saved before the delete, not only used for it: a failed delete clears the
+	exclusion reason, and the retry then has only this field to go on.
 	"""
 	if doc.get("taxjar_exclusion_reason") == EXCLUSION_LEGACY_UNCHECKED and not doc.get("taxjar_provider"):
-		return {"provider": LEGACY_PROVIDER}
-	return provider_params(doc)
+		doc.db_set("taxjar_provider", LEGACY_PROVIDER, update_modified=False)
 
 
 def _publish_transaction_update(invoice_name, status):

@@ -50,6 +50,17 @@ def _client(api_key="token-a", orders=(), refunds=()):
 	return client
 
 
+def _doc(values=None, **kwargs):
+	"""An invoice stand-in whose db_set writes to itself, as a document's does."""
+	doc = frappe._dict(values or {}, **kwargs)
+
+	def db_set(field, value=None, update_modified=True):
+		doc.update(field if isinstance(field, dict) else {field: value})
+
+	doc.db_set = MagicMock(side_effect=db_set)
+	return doc
+
+
 def _pending(company, invoices=10, first_created=datetime(2026, 8, 14, 9, 30)):
 	return frappe._dict(company=company, invoices=invoices, first_created=first_created)
 
@@ -277,7 +288,7 @@ class TestTheJob(UnitTestCase):
 
 		read = read or (lambda client, company, windows, cache: ({"SINV-1"}, set(), 2 * len(windows)))
 		with patch(f"{_LC}.pending_by_company", return_value=pending), \
-		     patch(f"{_LC}.get_client", side_effect=lambda company: clients.get(company)), \
+		     patch(f"{_LC}.get_client", side_effect=lambda company, mode=None: clients.get(company)) as get_client, \
 		     patch(f"{_LC}._read_transaction_ids", side_effect=read), \
 		     patch(f"{_LC}.apply_outcomes", return_value={"checked": 10, "found": 9, "not_found": 1, "cancelled_in_taxjar": 0}) as apply, \
 		     patch(f"{_LC}._write_state", side_effect=lambda **values: states.append(values)), \
@@ -286,7 +297,25 @@ class TestTheJob(UnitTestCase):
 		     patch(f"{_LC}.frappe.publish_realtime"), \
 		     patch(f"{_LC}._publish"):
 			legacy_check._check_all_companies()
+		self.get_client = get_client
 		return states, apply
+
+	def test_reads_the_live_account_whatever_api_mode_says(self):
+		"""API Mode can change to Sandbox while the job waits in the queue. The
+		sandbox account holds none of the live invoices."""
+		self._run([_pending("ACME")], {"ACME": _client()})
+
+		self.get_client.assert_called_once_with("ACME", mode="Live")
+
+	def test_each_company_saves_its_counts_before_the_next_starts(self):
+		"""A later company that stops the worker must not leave the first
+		company's invoices checked with no counts on the tab."""
+		states, _apply = self._run(
+			[_pending("ACME"), _pending("Beta")], {"ACME": _client(), "Beta": _client(api_key="token-b")}
+		)
+
+		summaries = [json.loads(s["legacy_check_summary"]) for s in states if "legacy_check_status" not in s]
+		self.assertEqual([sorted(summary) for summary in summaries], [["ACME"], ["ACME", "Beta"]])
 
 	def test_marks_running_then_done(self):
 		states, _apply = self._run([_pending("ACME")], {"ACME": _client()})
@@ -335,6 +364,24 @@ class TestTheJob(UnitTestCase):
 		summary = json.loads(states[-1]["legacy_check_summary"])
 		self.assertEqual(summary["Done Co"], earlier["Done Co"])
 		self.assertIn("ACME", summary)
+
+
+class TestAFailedRun(UnitTestCase):
+	def test_the_failed_state_is_committed_before_the_raise(self):
+		"""The job runner rolls back after the raise. Without the commit the
+		tab would read the state from before the run."""
+		calls = []
+		with patch(f"{_LC}._check_all_companies", side_effect=RuntimeError("boom")), \
+		     patch(f"{_LC}.frappe.db.rollback"), \
+		     patch(f"{_LC}.frappe.log_error"), \
+		     patch(f"{_LC}._write_state", side_effect=lambda **values: calls.append(("write", values))), \
+		     patch(f"{_LC}.frappe.db.commit", side_effect=lambda: calls.append(("commit", None))), \
+		     patch(f"{_LC}._publish"):
+			with self.assertRaises(RuntimeError):
+				legacy_check.check_legacy_invoices()
+
+		self.assertEqual(calls[0][1]["legacy_check_status"], STATUS_FAILED)
+		self.assertEqual(calls[1], ("commit", None))
 
 
 class TestStartingTheJob(UnitTestCase):
@@ -498,10 +545,11 @@ class TestTheStateTheTabReads(UnitTestCase):
 			api_mode="Live",
 		)
 		with patch(f"{_LC}.frappe.has_permission"), \
-		     patch(f"{_LC}.frappe.db.get_value", return_value=values), \
+		     patch(f"{_LC}.frappe.db.get_singles_dict", return_value=values), \
 		     patch(f"{_LC}.is_job_enqueued", return_value=job_alive), \
-		     patch(f"{_LC}.pending_by_company", return_value=[_pending("ACME", invoices=7)]), \
-		     patch(f"{_LC}.get_client", return_value=_client()):
+		     patch(f"{_LC}._permitted_pending_by_company", return_value=[_pending("ACME", invoices=7)]), \
+		     patch(f"{_LC}.get_client", return_value=_client()) as get_client:
+			self.get_client = get_client
 			return legacy_check.get_legacy_check_state()
 
 	def test_a_run_whose_worker_died_reads_failed(self):
@@ -521,6 +569,19 @@ class TestTheStateTheTabReads(UnitTestCase):
 		self.assertEqual(state["pending"], 7)
 		self.assertEqual(state["cutoff_month"], "2026-10")
 
+	def test_the_credential_is_the_live_one(self):
+		self._state(STATUS_DONE, job_alive=False)
+
+		self.assertEqual({c.kwargs["mode"] for c in self.get_client.call_args_list}, {"Live"})
+
+	def test_the_pending_counts_follow_invoice_permissions(self):
+		with patch(f"{_LC}.frappe.db.has_column", return_value=True), \
+		     patch(f"{_LC}.frappe.get_list", return_value=[]) as get_list:
+			legacy_check._permitted_pending_by_company()
+
+		self.assertEqual(get_list.call_args.args, ("Sales Invoice",))
+		self.assertEqual(get_list.call_args.kwargs["group_by"], "company")
+
 
 class TestProvider(UnitTestCase):
 	def test_ours_unless_the_invoice_records_another(self):
@@ -535,7 +596,7 @@ class TestProvider(UnitTestCase):
 		delete path reads a 404 as "already gone" - while TaxJar keeps it."""
 		from taxjar_integration.taxjar_integration import taxjar_integration as tj
 
-		doc = frappe._dict(name="SINV-2", company="ACME", is_return=0, taxjar_provider=LEGACY_PROVIDER)
+		doc = _doc(name="SINV-2", company="ACME", is_return=0, taxjar_provider=LEGACY_PROVIDER)
 		client = MagicMock()
 		with patch.object(tj.frappe, "get_doc", return_value=doc), \
 		     patch.object(tj, "get_client", return_value=client), \
@@ -568,7 +629,34 @@ class TestCancelBeforeTheCheckAnswers(UnitTestCase):
 		return client, status, failure
 
 	def _invoice(self, **values):
-		return frappe._dict({"name": "SINV-3", "company": "ACME", "is_return": 0, **values})
+		return _doc({"name": "SINV-3", "company": "ACME", "is_return": 0, **values})
+
+	def test_the_provider_is_saved_before_the_delete(self):
+		"""A failed delete clears the exclusion reason. The retry then has
+		only the saved provider to go on."""
+		doc = self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED)
+		self._delete(doc)
+
+		doc.db_set.assert_called_once_with("taxjar_provider", LEGACY_PROVIDER, update_modified=False)
+
+	def test_a_cancel_with_no_token_saves_the_provider(self):
+		from taxjar_integration.taxjar_integration import taxjar_integration as tj
+
+		doc = self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED)
+		with patch.object(tj, "company_scope", return_value=frappe._dict(files=True)), \
+		     patch.object(tj, "_export_is_excluded", return_value=False), \
+		     patch.object(tj, "get_client", return_value=None), \
+		     patch.object(tj, "describe_missing_credential", return_value="no token"), \
+		     patch.object(tj, "_publish_transaction_update"):
+			tj.enqueue_taxjar_delete(doc, "on_cancel")
+
+		self.assertEqual(doc.taxjar_provider, LEGACY_PROVIDER)
+
+	def test_a_checked_invoice_saves_nothing(self):
+		doc = self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_NOT_FOUND)
+		self._delete(doc)
+
+		doc.db_set.assert_not_called()
 
 	def test_an_unchecked_invoice_is_deleted_under_the_version_15_provider(self):
 		client, status, failure = self._delete(self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED))
@@ -728,7 +816,7 @@ class TestTheTab(UnitTestCase):
 		self.assertNotIn("_legacy_summary", js)
 		self.assertNotIn("cancelled but still in TaxJar'", js)
 		self.assertIn("if (!row.pending && (row.not_found || row.cancelled_in_taxjar)) {", js)
-		self.assertIn("alerts.push(_legacy_review_alert(state, row));", js)
+		self.assertIn("alerts.push(_legacy_review_alert(row));", js)
 		self.assertGreater(js.index("const alerts = _legacy_alerts(state);"), js.index("$section.append(_legacy_companies_table(frm, state));"))
 
 	def test_alert_titles_carry_no_count(self):
@@ -756,8 +844,8 @@ class TestTheTab(UnitTestCase):
 
 	def test_the_state_of_a_site_that_did_not_upgrade(self):
 		with patch(f"{_LC}.require_permission"), \
-		     patch(f"{_LC}.frappe.db.get_value", return_value=frappe._dict(api_mode="Live")), \
-		     patch(f"{_LC}.pending_by_company", return_value=[]):
+		     patch(f"{_LC}.frappe.db.get_singles_dict", return_value=frappe._dict(api_mode="Live")), \
+		     patch(f"{_LC}._permitted_pending_by_company", return_value=[]):
 			state = legacy_check.get_legacy_check_state()
 
 		self.assertIsNone(state["cutoff_date"])

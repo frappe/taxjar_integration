@@ -109,14 +109,24 @@ class TaxJarTransactionSync {
 	}
 
 	// A link from another screen can open the page on a company, a date range
-	// and a tab. The Migration tab on TaxJar Settings does this:
-	// its invoices are older than the one-month default range. Read once, then
-	// cleared, so a later visit opens on the page's own defaults.
+	// and a tab. Read once, then cleared, so a later visit opens on the page's
+	// own defaults.
+	//
+	// The Migration tab on TaxJar Settings also sends pre_upgrade, which keeps
+	// the invoices from before the upgrade (see _pre_upgrade_filters on the
+	// server). The page shows no control for it and clears it on the next visit.
+	// Those invoices are older than the one-month default range, so the dates
+	// are cleared with it.
 	apply_route_options() {
 		const options = frappe.route_options;
+		this.pre_upgrade = Boolean(options && options.pre_upgrade);
 		if (!options) return;
 		frappe.route_options = null;
 
+		if (this.pre_upgrade) {
+			this.filter_from_date.set_input("");
+			this.filter_to_date.set_input("");
+		}
 		if (options.company) this.filter_company.set_input(options.company);
 		if (options.from_date) this.filter_from_date.set_input(options.from_date);
 		if (options.to_date) this.filter_to_date.set_input(options.to_date);
@@ -368,6 +378,8 @@ class TaxJarTransactionSync {
 
 		const transaction_nature = this.filter_transaction_nature?.get_value();
 		if (transaction_nature) filters.transaction_nature = transaction_nature;
+
+		if (this.pre_upgrade) filters.pre_upgrade = 1;
 
 		return filters;
 	}

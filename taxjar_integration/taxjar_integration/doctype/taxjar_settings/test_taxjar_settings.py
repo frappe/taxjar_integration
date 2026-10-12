@@ -9416,6 +9416,45 @@ class TestTaxJarTransactionSyncPage(UnitTestCase):
 		conditions = _build_conditions({})
 		self.assertNotIn("posting_date", conditions)
 
+	def test_pre_upgrade_keeps_the_invoices_the_legacy_check_answers(self):
+		"""The Migration tab opens this page with pre_upgrade. A posting-date
+		range cannot select those invoices: the check groups them by creation
+		month."""
+		from taxjar_integration.taxjar_integration.page.taxjar_transactions.taxjar_transactions import (
+			_pre_upgrade_filters,
+		)
+		from taxjar_integration.taxjar_integration.taxjar_integration import (
+			EXCLUSION_LEGACY_NOT_FOUND,
+			EXCLUSION_LEGACY_UNCHECKED,
+			LEGACY_PROVIDER,
+		)
+
+		self.assertIsNone(_pre_upgrade_filters({}))
+		self.assertEqual(
+			_pre_upgrade_filters({"pre_upgrade": "1"}),
+			[
+				["taxjar_provider", "=", LEGACY_PROVIDER],
+				["taxjar_exclusion_reason", "in", [EXCLUSION_LEGACY_NOT_FOUND, EXCLUSION_LEGACY_UNCHECKED]],
+			],
+		)
+
+	def test_pre_upgrade_narrows_the_table_the_cards_and_the_count(self):
+		from taxjar_integration.taxjar_integration.page.taxjar_transactions.taxjar_transactions import (
+			get_summary,
+			get_transactions,
+		)
+
+		with patch(f"{self.MOD}.frappe.db.has_column", return_value=True), \
+		     patch(f"{self.MOD}.frappe.get_list", return_value=[]) as mock_get_list, \
+		     patch(f"{self.MOD}.permitted_count", return_value=0) as mock_count:
+			get_transactions(filters={"pre_upgrade": 1}, page=1)
+			get_summary(filters={"pre_upgrade": 1})
+
+		for call in mock_get_list.call_args_list:
+			self.assertTrue(call.kwargs["or_filters"])
+		for call in mock_count.call_args_list:
+			self.assertTrue(call.args[2])
+
 	def test_every_state_tab_constrains_docstatus(self):
 		"""All Transactions is deliberately the exception: it holds drafts,
 		submitted and cancelled alike, so it is the one tab with nothing to say

@@ -89,12 +89,7 @@ def get_legacy_check_state():
 	"""Everything the Migration tab shows."""
 	require_permission(SETTINGS, "read")
 
-	values = frappe.db.get_value(
-		SETTINGS,
-		SETTINGS,
-		["legacy_cutoff_date", "legacy_check_status", "legacy_check_summary", "legacy_check_last_run", "api_mode"],
-		as_dict=True,
-	)
+	values = frappe.db.get_singles_dict(SETTINGS, cast=True)
 	status = values.legacy_check_status or STATUS_PENDING
 	summary = _load_summary(values.legacy_check_summary)
 
@@ -103,7 +98,7 @@ def get_legacy_check_state():
 	if status == STATUS_RUNNING and not is_job_enqueued(JOB_ID):
 		status = STATUS_FAILED
 
-	pending = {row.company: row for row in pending_by_company()}
+	pending = {row.company: row for row in _permitted_pending_by_company()}
 	companies = []
 	for company in sorted(set(pending) | set(summary)):
 		row = pending.get(company)
@@ -111,7 +106,7 @@ def get_legacy_check_state():
 			"company": company,
 			"pending": cint(row.invoices) if row else 0,
 			"first_month": _month_label(row.first_created) if row else None,
-			"has_credential": bool(get_client(company)),
+			"has_credential": bool(get_client(company, mode="Live")),
 		}
 		entry.update(summary.get(company) or {})
 		companies.append(entry)
@@ -144,6 +139,24 @@ def pending_by_company():
 		.where(_is_unchecked(invoice))
 		.groupby(invoice.company)
 		.run(as_dict=True)
+	)
+
+
+def _permitted_pending_by_company():
+	"""pending_by_company(), for only the invoices the caller may read.
+
+	The tab shows these counts to every Settings reader. The job and the
+	buttons that start it use pending_by_company(), which covers every company.
+	"""
+	if not frappe.db.has_column("Sales Invoice", "taxjar_exclusion_reason"):
+		return []
+
+	return frappe.get_list(
+		"Sales Invoice",
+		filters={"docstatus": ["in", [1, 2]], "taxjar_exclusion_reason": EXCLUSION_LEGACY_UNCHECKED},
+		fields=["company", {"COUNT": "*", "as": "invoices"}, {"MIN": "creation", "as": "first_created"}],
+		group_by="company",
+		limit_page_length=0,
 	)
 
 
@@ -288,6 +301,8 @@ def check_legacy_invoices():
 		frappe.db.rollback()
 		frappe.log_error(title="TaxJar pre-upgrade invoice check failed")
 		_write_state(legacy_check_status=STATUS_FAILED, legacy_check_last_run=now())
+		# The job runner rolls back after the raise below. Keep the Failed state.
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
 		_publish({"done": True})
 		raise
 
@@ -304,7 +319,9 @@ def _check_all_companies():
 
 	for row in pending_by_company():
 		company = row.company
-		client = get_client(company)
+		# Live, whatever API Mode says now. A switch to Sandbox while the job
+		# waits must not record what the sandbox account holds.
+		client = get_client(company, mode="Live")
 		if not client:
 			summary[company] = {"result": RESULT_NO_CREDENTIAL, "invoices": cint(row.invoices)}
 			continue
@@ -325,14 +342,18 @@ def _check_all_companies():
 			"calls": calls,
 			**counts,
 		}
-		frappe.db.commit()
+		_write_state(legacy_check_summary=json.dumps(summary, sort_keys=True))
+		# This company's invoices and its counts commit together. A later
+		# company that stops the worker cannot leave them with no counts.
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
 
 	_write_state(
 		legacy_check_status=STATUS_FAILED if failed else STATUS_DONE,
 		legacy_check_last_run=now(),
 		legacy_check_summary=json.dumps(summary, sort_keys=True),
 	)
-	frappe.db.commit()
+	# Commit before the realtime events below make the open form read this state.
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit
 
 	# One refresh for the Transaction Sync page, not one for each invoice.
 	frappe.publish_realtime("taxjar_transactions_update", {}, room=get_doctype_room("Sales Invoice"))
