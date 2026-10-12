@@ -109,7 +109,7 @@ class TaxJarTransactionSync {
 	}
 
 	// A link from another screen can open the page on a company, a date range
-	// and a tab. The Pre-Upgrade Invoices tab on TaxJar Settings does this:
+	// and a tab. The Migration tab on TaxJar Settings does this:
 	// its invoices are older than the one-month default range. Read once, then
 	// cleared, so a later visit opens on the page's own defaults.
 	apply_route_options() {

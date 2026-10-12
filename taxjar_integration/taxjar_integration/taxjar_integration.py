@@ -95,8 +95,9 @@ def provider_params(doc):
 	"""The provider to show or delete this invoice's transaction under.
 
 	Ours, unless the invoice records another. A pre-upgrade invoice that TaxJar
-	holds records LEGACY_PROVIDER (see legacy_check.py). Asked with our provider,
-	TaxJar answers 404 for it, and the delete path reads a 404 as "already gone".
+	holds records LEGACY_PROVIDER (see legacy_check.py). TaxJar keeps each
+	provider's transactions apart: asked under the wrong one, a show answers
+	404, and a delete answers success and removes nothing.
 	"""
 	return {"provider": doc.get("taxjar_provider") or TAXJAR_PROVIDER}
 
@@ -830,7 +831,7 @@ def delete_transaction_from_taxjar(invoice_name):
 	is_refund = doc.is_return
 	action = "delete_refund" if is_refund else "delete_order"
 	payload = {"transaction_id": doc.name}
-	provider = provider_params(doc)
+	provider = _delete_provider(doc)
 
 	try:
 		log_taxjar_call(action=action, status="request", payload=payload, context=ctx)
@@ -853,6 +854,26 @@ def delete_transaction_from_taxjar(invoice_name):
 		_record_sync_failure(err, action, payload, ctx, invoice_name)
 	except Exception as err:
 		_record_sync_failure(err, action, payload, ctx, invoice_name)
+
+
+def _delete_provider(doc):
+	"""The provider to delete this invoice's transaction under.
+
+	An invoice submitted before the upgrade that legacy_check.py has not
+	answered yet records no provider. This app never filed it: the
+	mark_pre_upgrade_invoices patch marks only rows it never sent, and the
+	invoice form hides Sync to TaxJar until the check answers. So only version
+	15 can have filed it, and version 15 filed everything under
+	LEGACY_PROVIDER.
+
+	Asked under any other provider, TaxJar's delete answers success and
+	removes nothing (verified on the live API, 2026-10-12), so the answer
+	cannot tell the job to try again. The provider has to be right the first
+	time.
+	"""
+	if doc.get("taxjar_exclusion_reason") == EXCLUSION_LEGACY_UNCHECKED and not doc.get("taxjar_provider"):
+		return {"provider": LEGACY_PROVIDER}
+	return provider_params(doc)
 
 
 def _publish_transaction_update(invoice_name, status):

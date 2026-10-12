@@ -21,7 +21,7 @@ The outcome for each invoice:
 
 The job state lives on TaxJar Settings: legacy_check_status, the last run time,
 and legacy_check_summary, a JSON object with one entry for each company. The
-Pre-Upgrade Invoices tab renders it.
+Migration tab renders it.
 """
 
 import hashlib
@@ -30,11 +30,12 @@ from datetime import date, timedelta
 
 import frappe
 from frappe import _
-from frappe.query_builder.functions import Count, Min
+from frappe.query_builder.functions import Coalesce, Count, Min
 from frappe.realtime import get_doctype_room
 from frappe.utils import add_months, cint, get_datetime, getdate, now
 from frappe.utils.background_jobs import is_job_enqueued
 
+from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	settings_write_lock,
 )
@@ -42,6 +43,11 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	EXCLUSION_LEGACY_NOT_FOUND,
 	EXCLUSION_LEGACY_UNCHECKED,
 	LEGACY_PROVIDER,
+	_allowed_companies_by_customer,
+	_customer_sync_companies,
+	_customer_sync_status_fields,
+	_enqueue_customer_sync,
+	_restrict_companies,
 	_sync_status_fields,
 	classify_taxjar_error,
 	get_client,
@@ -80,13 +86,13 @@ STALE_CANCEL_ERROR = (
 
 @frappe.whitelist()
 def get_legacy_check_state():
-	"""Everything the Pre-Upgrade Invoices tab shows."""
-	frappe.has_permission(SETTINGS, "read", throw=True)
+	"""Everything the Migration tab shows."""
+	require_permission(SETTINGS, "read")
 
 	values = frappe.db.get_value(
 		SETTINGS,
 		SETTINGS,
-		["legacy_cutoff_date", "legacy_check_status", "legacy_check_summary", "api_mode"],
+		["legacy_cutoff_date", "legacy_check_status", "legacy_check_summary", "legacy_check_last_run", "api_mode"],
 		as_dict=True,
 	)
 	status = values.legacy_check_status or STATUS_PENDING
@@ -114,6 +120,7 @@ def get_legacy_check_state():
 		"cutoff_date": values.legacy_cutoff_date,
 		"cutoff_month": _month_label(values.legacy_cutoff_date),
 		"status": status,
+		"last_run": values.legacy_check_last_run,
 		"api_mode": values.api_mode,
 		"companies": companies,
 		"pending": sum(entry["pending"] for entry in companies),
@@ -150,7 +157,7 @@ def _is_unchecked(invoice):
 @frappe.whitelist(methods=["POST"])
 def run_legacy_check():
 	"""The Run Check button."""
-	frappe.has_permission(SETTINGS, "write", throw=True)
+	require_permission(SETTINGS, "write")
 
 	if frappe.db.get_single_value(SETTINGS, "api_mode") != "Live":
 		frappe.throw(
@@ -180,17 +187,94 @@ def enqueue_legacy_check():
 	)
 
 
-def enqueue_after_setup():
-	"""Start the check when the guided setup finishes, if it has work to do.
+def enqueue_live_work():
+	"""Queue start_live_work() to run once this request commits.
 
-	Called from finish_setup(). A site that never ran version 15 has no
-	unchecked invoices, so this does nothing there.
+	Called when the guided setup finishes (finish_setup) and when API Mode
+	changes to Live (TaxJar Settings on_update). Both are the moment a site
+	upgraded from version 15 first has a live token: the upgrade itself
+	copies data while the site has no token at all.
+
+	A job, not a call inside the request: both callers can run under
+	settings_write_lock, and enqueue_legacy_check() takes the same lock to
+	write its status. The file lock does not re-enter. After commit, so the
+	job reads the save that queued it.
+	"""
+	frappe.enqueue(
+		"taxjar_integration.taxjar_integration.legacy_check.start_live_work",
+		queue="short",
+		enqueue_after_commit=True,
+	)
+
+
+def start_live_work():
+	"""Background job: start the work that waits for a live token.
+
+	Two pieces, each a no-op where there is nothing to do:
+
+	- a TaxJar sync for each customer whose exemption was never sent;
+	- the invoice check, for invoices submitted before the upgrade.
+
+	Live only. The check proves what the live account holds, and the sandbox
+	account is a different account.
 	"""
 	if frappe.db.get_single_value(SETTINGS, "api_mode") != "Live":
 		return
-	if not pending_by_company():
-		return
-	enqueue_legacy_check()
+	enqueue_unsent_exempt_customers()
+	if pending_by_company():
+		enqueue_legacy_check()
+
+
+def enqueue_unsent_exempt_customers():
+	"""Queue a TaxJar sync for each customer that holds an exemption but was
+	never sent to TaxJar. Returns how many customers were queued.
+
+	copy_legacy_customer_exemption writes the exemption straight to the
+	database, on a migrate that runs before the site has a token, so no save
+	hook queued a sync. Tax is right without one: each request sends the
+	exemption type from these columns. But TaxJar has no customer record
+	until something sends it.
+
+	"Never sent" is no TaxJar customer id and no sync status. A customer with
+	a status has a sync in hand, or a Failed one the retry cron and the
+	Customers page already handle. Queued is written before the jobs, the
+	same way the save hook and the Customers page do it, and only for a
+	customer with a company to go to.
+	"""
+	if not frappe.db.has_column("Customer", "taxjar_exemption_type"):
+		return 0
+
+	companies = _customer_sync_companies()
+	if not companies:
+		return 0
+
+	names = _unsent_exempt_customers_query().run(pluck=True)
+	allowed = _allowed_companies_by_customer(names)
+	queued = 0
+	for name in names:
+		targets = _restrict_companies(companies, allowed[name])
+		if not targets:
+			continue
+		frappe.db.set_value("Customer", name, _customer_sync_status_fields("Queued"), update_modified=False)
+		for company in targets:
+			_enqueue_customer_sync(name, company)
+		queued += 1
+	return queued
+
+
+def _unsent_exempt_customers_query():
+	"""Build the SELECT for enqueue_unsent_exempt_customers(). Returned rather
+	than run, so a test can read the statement."""
+	customer = frappe.qb.DocType("Customer")
+	return (
+		frappe.qb.from_(customer)
+		.select(customer.name)
+		.where(
+			(Coalesce(customer.taxjar_exemption_type, "") != "")
+			& (Coalesce(customer.taxjar_customer_id, "") == "")
+			& (Coalesce(customer.taxjar_customer_sync_status, "") == "")
+		)
+	)
 
 
 # ── The job ───────────────────────────────────────────────────────────────
@@ -309,12 +393,15 @@ def _list_ids(method, action, params, company):
 	ctx = {"doctype": "Company", "name": company, "check": "pre-upgrade invoices"}
 	log_taxjar_call(action=action, status="request", payload=params, context=ctx)
 	try:
-		ids = method(params)
+		# The SDK answers with a TaxJarOrders object, for refunds too. It has no
+		# len(), and it is an iterator that a second pass finds empty. One list
+		# is read here and counted and used from then on.
+		ids = list(method(params) or [])
 	except Exception as err:
 		log_taxjar_call(action=action, status="error", payload=params, error=classify_taxjar_error(err)["log_detail"], context=ctx)
 		raise
-	log_taxjar_call(action=action, status="success", payload=params, response={"count": len(ids or [])}, context=ctx)
-	return {str(transaction_id) for transaction_id in (ids or [])}
+	log_taxjar_call(action=action, status="success", payload=params, response={"count": len(ids)}, context=ctx)
+	return {str(transaction_id) for transaction_id in ids}
 
 
 # ── Writing the outcome ───────────────────────────────────────────────────

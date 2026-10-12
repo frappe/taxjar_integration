@@ -2,20 +2,10 @@ import frappe
 from frappe.query_builder.functions import Coalesce
 from frappe.utils import today
 
+from taxjar_integration.patches.mark_version_15_upgrade import is_version_15_upgrade
 from taxjar_integration.taxjar_integration.taxjar_integration import EXCLUSION_LEGACY_UNCHECKED
 
 SETTINGS = "TaxJar Settings"
-
-# Fields only version 15 wrote on TaxJar Settings. Removing a field from a
-# Single leaves its rows in tabSingles, so any one of them shows that this site
-# ran version 15.
-_VERSION_15_FIELDS = (
-	"api_key",
-	"sandbox_api_key",
-	"is_sandbox",
-	"tax_account_head",
-	"taxjar_create_transactions",
-)
 
 
 def execute():
@@ -29,8 +19,13 @@ def execute():
 
 	One UPDATE, for the reason backfill_transaction_nature gives: the fields are
 	read-only and derived, and a site can hold a very large number of invoices.
+
+	It runs only on the migrate that upgrades a site from version 15. A site
+	already on version 16 also runs this patch once, on the migrate that ships
+	it. Its invoices from before that upgrade can also carry Excluded with no
+	reason, and this app has written to them since, so they are left alone.
 	"""
-	if not _ran_version_15():
+	if not is_version_15_upgrade():
 		return
 
 	# The columns come from make_custom_fields(), which after_migrate runs after
@@ -47,17 +42,6 @@ def execute():
 	frappe.db.set_single_value(
 		SETTINGS,
 		{"legacy_cutoff_date": today(), "legacy_check_status": "Pending"},
-	)
-
-
-def _ran_version_15():
-	singles = frappe.qb.DocType("Singles")
-	return bool(
-		frappe.qb.from_(singles)
-		.select(singles.field)
-		.where((singles.doctype == SETTINGS) & singles.field.isin(_VERSION_15_FIELDS))
-		.limit(1)
-		.run()
 	)
 
 

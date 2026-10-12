@@ -21744,7 +21744,8 @@ class TestClearVersion15UpgradeMarker(UnitTestCase):
 		self.assertEqual(
 			sorted(readers),
 			["taxjar_integration.patches.copy_legacy_customer_exemption",
-			 "taxjar_integration.patches.copy_legacy_transaction_exemption"],
+			 "taxjar_integration.patches.copy_legacy_transaction_exemption",
+			 "taxjar_integration.patches.mark_pre_upgrade_invoices"],
 		)
 		clear = order.index("taxjar_integration.patches.clear_version_15_upgrade_marker")
 		for reader in readers:

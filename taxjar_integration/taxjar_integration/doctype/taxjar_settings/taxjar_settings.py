@@ -117,6 +117,15 @@ class TaxJarSettings(Document):
 		if self.flags.nexus_sync:
 			return
 
+		# Switched to Live: the work that waits for a live token can start - the
+		# check of invoices from before a version-15 upgrade, and the TaxJar sync
+		# of customers whose exemption was never sent. Imported here: legacy_check
+		# imports this module.
+		if self.has_value_changed("api_mode") and self.api_mode == "Live":
+			from taxjar_integration.taxjar_integration.legacy_check import enqueue_live_work
+
+			enqueue_live_work()
+
 		features_enabled = _is_taxjar_enabled(self)
 
 		# Custom fields, the Product Tax Category master and permissions are all set up

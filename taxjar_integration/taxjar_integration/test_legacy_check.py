@@ -39,10 +39,14 @@ _LC = "taxjar_integration.taxjar_integration.legacy_check"
 
 
 def _client(api_key="token-a", orders=(), refunds=()):
+	"""A client that answers like the SDK: a new TaxJarOrders on every call,
+	for refunds too. TaxJarOrders has no len() and reads only once."""
+	from taxjar.data.order import TaxJarOrders
+
 	client = MagicMock()
 	client.api_key = api_key
-	client.list_orders.return_value = list(orders)
-	client.list_refunds.return_value = list(refunds)
+	client.list_orders.side_effect = lambda params: TaxJarOrders(list(orders))
+	client.list_refunds.side_effect = lambda params: TaxJarOrders(list(refunds))
 	return client
 
 
@@ -143,6 +147,25 @@ class TestReadingTransactionIds(UnitTestCase):
 
 		with self.assertRaises(RuntimeError):
 			self._read(client, [(date(2026, 9, 1), date(2026, 9, 30))])
+
+
+class TestTheSdkAnswer(UnitTestCase):
+	def test_the_ids_come_from_the_sdk_object(self):
+		"""The SDK's TaxJarOrders has no len(). Counting it for the log raised
+		TypeError, and the check failed for every company."""
+		from taxjar.data.order import TaxJarOrders
+
+		from taxjar_integration.taxjar_integration.legacy_check import _list_ids
+
+		answer = TaxJarOrders(["SINV-1", "SINV-2"])
+		with self.assertRaises(TypeError):
+			len(answer)
+
+		with patch(f"{_LC}.log_taxjar_call") as log:
+			ids = _list_ids(lambda params: answer, "list_orders", {}, "ACME")
+
+		self.assertEqual(ids, {"SINV-1", "SINV-2"})
+		self.assertEqual(log.call_args.kwargs["response"], {"count": 2})
 
 
 class TestOutcomes(UnitTestCase):
@@ -351,24 +374,119 @@ class TestStartingTheJob(UnitTestCase):
 		self.assertEqual(enqueue.call_args.kwargs["queue"], "long")
 		write_state.assert_called_once_with(legacy_check_status=STATUS_RUNNING)
 
-	def test_setup_starts_the_check_only_when_it_has_work(self):
+	def test_the_job_starts_the_check_only_when_it_has_work(self):
 		cases = (("Sandbox", [_pending("ACME")], False), ("Live", [], False), ("Live", [_pending("ACME")], True))
 		for mode, pending, expected in cases:
 			with self.subTest(mode=mode, pending=bool(pending)):
 				with patch(f"{_LC}.frappe.db.get_single_value", return_value=mode), \
 				     patch(f"{_LC}.pending_by_company", return_value=pending), \
+				     patch(f"{_LC}.enqueue_unsent_exempt_customers"), \
 				     patch(f"{_LC}.enqueue_legacy_check") as enqueue:
-					legacy_check.enqueue_after_setup()
+					legacy_check.start_live_work()
 				self.assertEqual(enqueue.called, expected)
+
+	def test_live_also_sends_the_unsent_customers(self):
+		for mode, expected in (("Sandbox", False), ("Live", True)):
+			with self.subTest(mode=mode):
+				with patch(f"{_LC}.frappe.db.get_single_value", return_value=mode), \
+				     patch(f"{_LC}.pending_by_company", return_value=[]), \
+				     patch(f"{_LC}.enqueue_unsent_exempt_customers") as customers, \
+				     patch(f"{_LC}.enqueue_legacy_check"):
+					legacy_check.start_live_work()
+				self.assertEqual(customers.called, expected)
+
+	def test_the_work_runs_in_a_job_after_commit(self):
+		"""Never inside the caller's request: it may hold settings_write_lock."""
+		with patch(f"{_LC}.frappe.enqueue") as enqueue:
+			legacy_check.enqueue_live_work()
+		self.assertEqual(enqueue.call_args.args[0], "taxjar_integration.taxjar_integration.legacy_check.start_live_work")
+		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
 
 	def test_finish_setup_starts_the_check(self):
 		from taxjar_integration.taxjar_integration.page.taxjar_setup import taxjar_setup
 
 		with patch.object(taxjar_setup.frappe, "has_permission"), \
 		     patch.object(taxjar_setup.frappe, "get_single", return_value=MagicMock()), \
-		     patch.object(taxjar_setup, "enqueue_after_setup") as start:
+		     patch.object(taxjar_setup, "enqueue_live_work") as start:
 			taxjar_setup.finish_setup()
 		start.assert_called_once_with()
+
+
+class TestUnsentExemptCustomers(UnitTestCase):
+	"""The upgrade copies a customer's exemption with no token on the site, so
+	no save hook sent it to TaxJar. Going live sends it."""
+
+	def _run(self, names, companies=("ACME",), allowed=None):
+		query = MagicMock()
+		query.run.return_value = list(names)
+		with patch(f"{_LC}.frappe.db.has_column", return_value=True), \
+		     patch(f"{_LC}._customer_sync_companies", return_value=list(companies)), \
+		     patch(f"{_LC}._unsent_exempt_customers_query", return_value=query), \
+		     patch(f"{_LC}._allowed_companies_by_customer", return_value=allowed or dict.fromkeys(names)), \
+		     patch(f"{_LC}.frappe.db.set_value") as set_value, \
+		     patch(f"{_LC}._enqueue_customer_sync") as enqueue:
+			queued = legacy_check.enqueue_unsent_exempt_customers()
+		return queued, set_value, enqueue
+
+	def test_picks_customers_with_an_exemption_never_sent(self):
+		sql = " ".join(str(legacy_check._unsent_exempt_customers_query()).split())
+
+		self.assertIn("COALESCE(`taxjar_exemption_type`,'')<>''", sql)
+		self.assertIn("COALESCE(`taxjar_customer_id`,'')=''", sql)
+		self.assertIn("COALESCE(`taxjar_customer_sync_status`,'')=''", sql)
+
+	def test_queues_one_job_for_each_company_and_marks_queued(self):
+		queued, set_value, enqueue = self._run(["C-1", "C-2"], companies=("ACME", "Old Co"))
+
+		self.assertEqual(queued, 2)
+		self.assertEqual(
+			enqueue.call_args_list,
+			[call("C-1", "ACME"), call("C-1", "Old Co"), call("C-2", "ACME"), call("C-2", "Old Co")],
+		)
+		self.assertEqual(set_value.call_count, 2)
+		self.assertEqual(set_value.call_args.args[2]["taxjar_customer_sync_status"], "Queued")
+
+	def test_a_customer_restricted_to_other_companies_is_left_alone(self):
+		"""Queued with no job to clear it would sit there for good."""
+		queued, set_value, enqueue = self._run(["C-1"], allowed={"C-1": {"Elsewhere"}})
+
+		self.assertEqual(queued, 0)
+		set_value.assert_not_called()
+		enqueue.assert_not_called()
+
+	def test_nothing_without_a_taxjar_company(self):
+		queued, set_value, enqueue = self._run(["C-1"], companies=())
+
+		self.assertEqual(queued, 0)
+		enqueue.assert_not_called()
+
+
+class TestGoingLive(UnitTestCase):
+	"""TaxJar Settings queues the start when API Mode changes to Live."""
+
+	def _on_update(self, changed, mode):
+		from taxjar_integration.taxjar_integration.doctype.taxjar_settings import taxjar_settings as ts
+
+		doc = MagicMock()
+		doc.flags.nexus_sync = False
+		doc.api_mode = mode
+		doc.has_value_changed.side_effect = lambda field: field == "api_mode" and changed
+		doc.table_hvjw = []
+		doc.company_config = []
+		with patch.object(ts, "clear_company_config_cache"), \
+		     patch.object(ts, "_is_taxjar_enabled", return_value=False), \
+		     patch.object(ts.frappe, "enqueue"), \
+		     patch(f"{_LC}.enqueue_live_work") as start:
+			ts.TaxJarSettings.on_update(doc)
+		return start.called
+
+	def test_a_change_to_live_queues_the_start(self):
+		self.assertTrue(self._on_update(changed=True, mode="Live"))
+
+	def test_other_saves_do_not(self):
+		for changed, mode in ((False, "Live"), (True, "Sandbox")):
+			with self.subTest(changed=changed, mode=mode):
+				self.assertFalse(self._on_update(changed=changed, mode=mode))
 
 
 class TestTheStateTheTabReads(UnitTestCase):
@@ -428,11 +546,79 @@ class TestProvider(UnitTestCase):
 		client.delete_order.assert_called_once_with("SINV-2", params={"provider": LEGACY_PROVIDER})
 
 
+class TestCancelBeforeTheCheckAnswers(UnitTestCase):
+	"""An invoice cancelled before legacy_check.py has answered records no
+	provider. Only version 15 can have filed it, under LEGACY_PROVIDER.
+
+	TaxJar's delete answers success under any provider, and removes the order
+	only under the one that holds it (verified on the live API, 2026-10-12).
+	So the job cannot learn from the answer, and must ask the right provider
+	first. The client below answers the way TaxJar does."""
+
+	def _delete(self, doc):
+		from taxjar_integration.taxjar_integration import taxjar_integration as tj
+
+		client = MagicMock()
+		with patch.object(tj.frappe, "get_doc", return_value=doc), \
+		     patch.object(tj, "get_client", return_value=client), \
+		     patch.object(tj, "log_taxjar_call"), \
+		     patch.object(tj, "_record_sync_failure") as failure, \
+		     patch.object(tj, "_set_sync_status") as status:
+			tj.delete_transaction_from_taxjar(doc.name)
+		return client, status, failure
+
+	def _invoice(self, **values):
+		return frappe._dict({"name": "SINV-3", "company": "ACME", "is_return": 0, **values})
+
+	def test_an_unchecked_invoice_is_deleted_under_the_version_15_provider(self):
+		client, status, failure = self._delete(self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED))
+
+		client.delete_order.assert_called_once_with("SINV-3", params={"provider": LEGACY_PROVIDER})
+		status.assert_called_once_with("SINV-3", "Synced")
+		failure.assert_not_called()
+
+	def test_an_unchecked_return_is_deleted_the_same_way(self):
+		client, _status, _failure = self._delete(
+			self._invoice(is_return=1, taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED)
+		)
+
+		client.delete_refund.assert_called_once_with("SINV-3", params={"provider": LEGACY_PROVIDER})
+		client.delete_order.assert_not_called()
+
+	def test_a_checked_invoice_uses_the_provider_it_records(self):
+		client, _status, _failure = self._delete(self._invoice(taxjar_provider=LEGACY_PROVIDER))
+
+		client.delete_order.assert_called_once_with("SINV-3", params={"provider": LEGACY_PROVIDER})
+
+	def test_an_invoice_filed_after_the_upgrade_uses_ours(self):
+		"""Asking under the version-15 provider could delete a different order
+		that version 15 filed with the same name."""
+		client, _status, _failure = self._delete(self._invoice(taxjar_exclusion_reason=""))
+
+		client.delete_order.assert_called_once_with("SINV-3", params={"provider": TAXJAR_PROVIDER})
+
+	def test_a_not_found_invoice_uses_ours(self):
+		"""The check found nothing under the version-15 provider. If anyone
+		filed it since, this app did, under its own."""
+		client, _status, _failure = self._delete(self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_NOT_FOUND))
+
+		client.delete_order.assert_called_once_with("SINV-3", params={"provider": TAXJAR_PROVIDER})
+
+	def test_the_job_asks_once(self):
+		"""TaxJar's answer cannot tell a deleted order from one it never held, so
+		a second provider would only be a guess."""
+		client, _status, _failure = self._delete(self._invoice(taxjar_exclusion_reason=EXCLUSION_LEGACY_UNCHECKED))
+
+		self.assertEqual(client.delete_order.call_count, 1)
+
+
 class TestThePatch(UnitTestCase):
-	def test_does_nothing_on_a_site_that_never_ran_version_15(self):
+	def test_does_nothing_unless_this_migrate_upgrades_from_version_15(self):
+		"""A site already on version 16 runs this patch once, on the migrate that
+		ships it. Its old Excluded rows are not version-15 invoices to check."""
 		from taxjar_integration.patches import mark_pre_upgrade_invoices as patch_module
 
-		with patch.object(patch_module, "_ran_version_15", return_value=False), \
+		with patch.object(patch_module, "is_version_15_upgrade", return_value=False), \
 		     patch.object(patch_module, "_mark_query") as mark, \
 		     patch.object(patch_module.frappe.db, "set_single_value") as set_single:
 			patch_module.execute()
@@ -442,7 +628,7 @@ class TestThePatch(UnitTestCase):
 	def test_marks_the_invoices_and_records_the_upgrade_date(self):
 		from taxjar_integration.patches import mark_pre_upgrade_invoices as patch_module
 
-		with patch.object(patch_module, "_ran_version_15", return_value=True), \
+		with patch.object(patch_module, "is_version_15_upgrade", return_value=True), \
 		     patch.object(patch_module.frappe.db, "has_column", return_value=True), \
 		     patch.object(patch_module, "_mark_query") as mark, \
 		     patch.object(patch_module.frappe.db, "set_single_value") as set_single, \
@@ -465,11 +651,120 @@ class TestThePatch(UnitTestCase):
 		self.assertIn("COALESCE(`taxjar_sync_status`,'') IN ('','Excluded')", sql)
 		self.assertIn("COALESCE(`taxjar_exclusion_reason`,'')=''", sql)
 
-	def test_reads_the_version_15_settings_rows(self):
-		from taxjar_integration.patches import mark_pre_upgrade_invoices as patch_module
+	def test_it_runs_while_the_version_15_marker_is_set(self):
+		"""clear_version_15_upgrade_marker deletes the marker, so this patch has
+		to come before it."""
+		import os
 
-		for field in ("api_key", "taxjar_create_transactions", "tax_account_head"):
-			self.assertIn(field, patch_module._VERSION_15_FIELDS)
+		import taxjar_integration
+
+		path = os.path.join(os.path.dirname(taxjar_integration.__file__), "patches.txt")
+		with open(path) as handle:
+			order = [line.strip() for line in handle if line.strip().startswith("taxjar_integration.")]
+
+		self.assertLess(
+			order.index("taxjar_integration.patches.mark_pre_upgrade_invoices"),
+			order.index("taxjar_integration.patches.clear_version_15_upgrade_marker"),
+		)
+
+
+class TestTheTab(UnitTestCase):
+	"""The Migration tab shows on every site. Only a site upgraded
+	from version 15 has invoices in it."""
+
+	def _settings_path(self, name):
+		import os
+
+		return os.path.join(
+			frappe.get_app_path("taxjar_integration"), "taxjar_integration", "doctype", "taxjar_settings", name
+		)
+
+	def test_the_tab_has_no_condition(self):
+		with open(self._settings_path("taxjar_settings.json")) as handle:
+			fields = {f["fieldname"]: f for f in json.load(handle)["fields"]}
+
+		self.assertEqual(fields["legacy_tab"]["label"], "Migration")
+		self.assertFalse(fields["legacy_tab"].get("depends_on"))
+		self.assertFalse(fields["legacy_tab"].get("hidden"))
+
+	def test_the_tab_is_drawn_without_an_upgrade_date(self):
+		with open(self._settings_path("taxjar_settings.js")) as handle:
+			js = handle.read()
+
+		self.assertNotIn("!frm.doc.legacy_cutoff_date", js)
+		self.assertIn("if (!state.cutoff_date) {", js)
+		self.assertIn("Nothing to check on this site", js)
+		self.assertNotIn("__('Not needed')", js)
+
+	def test_the_tab_is_one_full_width_view(self):
+		"""The view draws its own header, button and dates. The fields that used
+		to hold them are gone, and the two dates sit in the hidden section."""
+		with open(self._settings_path("taxjar_settings.json")) as handle:
+			doc = json.load(handle)
+		fields = {f["fieldname"]: f for f in doc["fields"]}
+		order = doc["field_order"]
+
+		for gone in ("legacy_intro_html", "legacy_check_status_html", "run_legacy_check_btn", "section_legacy_check"):
+			self.assertNotIn(gone, fields)
+		self.assertTrue(fields["section_legacy_raw"].get("hidden"))
+		raw = order.index("section_legacy_raw")
+		for kept in ("legacy_cutoff_date", "legacy_check_last_run"):
+			self.assertGreater(order.index(kept), raw)
+
+	def test_the_status_reads_as_the_design_names_it(self):
+		with open(self._settings_path("taxjar_settings.js")) as handle:
+			js = handle.read()
+
+		self.assertIn("__('TaxJar Invoice Sync Status')", js)
+		for label in ("Checking…", "All found", "Needs review", "Stale in TaxJar"):
+			self.assertIn(f"__('{label}')", js)
+
+	def test_the_issues_are_alerts_not_a_summary_line(self):
+		"""A company the check flagged gets one alert that names its not-found
+		and stale invoices, below the table."""
+		with open(self._settings_path("taxjar_settings.js")) as handle:
+			js = handle.read()
+
+		self.assertNotIn("_legacy_summary", js)
+		self.assertNotIn("cancelled but still in TaxJar'", js)
+		self.assertIn("if (!row.pending && (row.not_found || row.cancelled_in_taxjar)) {", js)
+		self.assertIn("alerts.push(_legacy_review_alert(state, row));", js)
+		self.assertGreater(js.index("const alerts = _legacy_alerts(state);"), js.index("$section.append(_legacy_companies_table(frm, state));"))
+
+	def test_alert_titles_carry_no_count(self):
+		"""The title names the issue. The count is in the description."""
+		import re
+
+		with open(self._settings_path("taxjar_settings.js")) as handle:
+			js = handle.read()
+
+		alerts = js[js.index("function _legacy_alerts"):js.index("function _open_setup_connection")]
+		titles = re.findall(r"title(?::|\s*=)\s*__\('([^']*)'", alerts)
+		self.assertEqual(len(titles), 6)
+		for title in titles:
+			# {0} is the company. Any other placeholder or digit is a count.
+			self.assertNotRegex(title.replace("{0}", ""), r"\{\d\}|\d", title)
+
+	def test_the_heading_carries_no_status_badge(self):
+		"""Each company's result is in the table, so the heading shows none."""
+		with open(self._settings_path("taxjar_settings.js")) as handle:
+			js = handle.read()
+
+		self.assertNotIn("LEGACY_STATUS", js)
+		for label in ("Not run", "Completed"):
+			self.assertNotIn(f"__('{label}')", js)
+
+	def test_the_state_of_a_site_that_did_not_upgrade(self):
+		with patch(f"{_LC}.require_permission"), \
+		     patch(f"{_LC}.frappe.db.get_value", return_value=frappe._dict(api_mode="Live")), \
+		     patch(f"{_LC}.pending_by_company", return_value=[]):
+			state = legacy_check.get_legacy_check_state()
+
+		self.assertIsNone(state["cutoff_date"])
+		self.assertIsNone(state["last_run"])
+		self.assertIsNone(state["cutoff_month"])
+		self.assertEqual(state["companies"], [])
+		self.assertEqual(state["pending"], 0)
 
 
 class TestTheInvoiceButton(UnitTestCase):

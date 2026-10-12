@@ -35,7 +35,7 @@ from taxjar_integration.taxjar_integration.access import require_permission
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	settings_write_lock,
 )
-from taxjar_integration.taxjar_integration.legacy_check import enqueue_after_setup
+from taxjar_integration.taxjar_integration.legacy_check import enqueue_live_work
 from taxjar_integration.taxjar_integration.taxjar_integration import (
 	_validate_address_with_taxjar,
 	company_address_names,
@@ -718,10 +718,10 @@ def finish_setup():
 	record_setup_finished()
 	_setup_finished(settings)
 
-	# A site upgraded from version 15 now has a token to ask TaxJar with.
-	# Outside the lock: enqueue_legacy_check() takes the same lock to write
-	# its status, and the file lock does not re-enter.
-	enqueue_after_setup()
+	# The site now has a token to ask TaxJar with: check the invoices from
+	# before a version-15 upgrade, and send customers whose exemption was
+	# never sent. In a job, after commit - see enqueue_live_work().
+	enqueue_live_work()
 
 	return {"ok": True, "setup_complete": True}
 
