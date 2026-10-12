@@ -17,10 +17,9 @@ def execute():
 	before this release hold a blank. Those are never saved again, and a blank
 	keeps them out of the Transaction Sync page's Export filter for good.
 
-	Two statements rather than a loop over documents. The field is read-only and
-	derived, nothing hooks its change, and a site can hold a very large number of
-	invoices - loading each one to set one column would be a long migrate for no
-	added correctness.
+	The work itself lives in backfill_if_needed(), which install.setup_taxjar()
+	calls as well. A patch alone does not reach every site that needs it - see
+	that function.
 	"""
 	# The field is created by make_custom_fields(), which this app runs from its
 	# after_migrate hook - and after_migrate runs after patches. So on the
@@ -33,10 +32,64 @@ def execute():
 	if not frappe.db.has_column("Sales Invoice", "taxjar_transaction_nature"):
 		make_custom_fields()
 
+	backfill_if_needed()
+
+
+def backfill_if_needed():
+	"""Give every blank nature an answer. Safe to call as often as a caller likes.
+
+	Called from the patch above, and from install.setup_taxjar(). Both are needed.
+	Installing an app records every patch in patches.txt as done without running
+	one (frappe/installer.py:380, set_all_patches_as_completed), so a site that
+	already holds Sales Invoices when this app is installed never gets the patch.
+	Its invoices are submitted and never saved again, so the validate hook never
+	reaches them either, and their nature stays blank for good.
+
+	Two statements rather than a loop over documents. The field is read-only and
+	derived, nothing hooks its change, and a site can hold a very large number of
+	invoices - loading each one to set one column would be a long migrate for no
+	added correctness.
+	"""
+	# setup_taxjar() calls this on every migrate, and it runs before
+	# make_custom_fields() has reached a site whose column is still missing.
+	# Nothing to fill there, and the patch creates the column itself.
+	if not frappe.db.has_column("Sales Invoice", "taxjar_transaction_nature"):
+		return
+
+	# The two statements below scan the table, so they run only when there is a
+	# row to write. Every other migrate pays one indexed read instead.
+	if not _has_blank_row():
+		return
+
 	# Order matters. The first statement claims the export rows, and the second
 	# gives every row that is still blank the domestic answer.
 	_export_query().run()
 	_domestic_query().run()
+
+
+def _has_blank_row():
+	"""Whether any Sales Invoice still holds no nature.
+
+	The column is tested directly, as IS NULL or the empty string, rather than
+	through COALESCE. A function wrapped around a column cannot use that column's
+	index, and this one is indexed - which is also why the two UPDATE statements
+	below scan rather than seek, and why this read stands in front of them.
+
+	A blank is stored as the empty string on every site I can read, and the
+	column allows NULL, so both are asked for.
+	"""
+	sales_invoice = frappe.qb.DocType("Sales Invoice")
+
+	return bool(
+		frappe.qb.from_(sales_invoice)
+		.select(sales_invoice.name)
+		.where(
+			sales_invoice.taxjar_transaction_nature.isnull()
+			| (sales_invoice.taxjar_transaction_nature == "")
+		)
+		.limit(1)
+		.run()
+	)
 
 
 def _destination_address(sales_invoice):

@@ -11389,6 +11389,7 @@ class TestInstallSetup(UnitTestCase):
 		from taxjar_integration import install
 
 		with patch("taxjar_integration.install.make_custom_fields") as mock_make, \
+		     patch("taxjar_integration.install.backfill_if_needed") as mock_backfill, \
 		     patch("taxjar_integration.install.add_product_tax_categories") as mock_cats, \
 		     patch("taxjar_integration.install.sync_all_company_tax_templates") as mock_sync, \
 		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax") as mock_hide, \
@@ -11396,7 +11397,7 @@ class TestInstallSetup(UnitTestCase):
 		     patch("taxjar_integration.install.add_guided_setup_alert") as mock_alert, \
 		     patch("taxjar_integration.install.set_workspace_roles", create=True) as mock_roles:
 			install.setup_taxjar()
-		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles
+		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles, mock_backfill
 
 	def test_after_install_runs_full_setup(self):
 		from taxjar_integration import install
@@ -11404,13 +11405,34 @@ class TestInstallSetup(UnitTestCase):
 			install.after_install()
 		mock_setup.assert_called_once()
 
-		mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles = self._run_setup()
+		mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles, mock_backfill = self._run_setup()
 		mock_make.assert_called_once()
+		mock_backfill.assert_called_once()
 		mock_cats.assert_called_once()
 		mock_sync.assert_called_once()
 		mock_hide.assert_called_once()
 		mock_desc.assert_called_once()
 		mock_alert.assert_called_once()
+
+	def test_setup_runs_the_nature_backfill_after_making_the_fields(self):
+		"""Installing an app records every patch as done without running one, so
+		a site that already holds Sales Invoices never gets this backfill from
+		its patch. The order matters: the backfill writes a column that
+		make_custom_fields() creates."""
+		from taxjar_integration import install
+
+		order = []
+		with patch("taxjar_integration.install.make_custom_fields", side_effect=lambda: order.append("fields")), \
+		     patch("taxjar_integration.install.backfill_if_needed", side_effect=lambda: order.append("backfill")), \
+		     patch("taxjar_integration.install.add_product_tax_categories"), \
+		     patch("taxjar_integration.install.sync_all_company_tax_templates"), \
+		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax"), \
+		     patch("taxjar_integration.install.set_taxes_field_description"), \
+		     patch("taxjar_integration.install.add_guided_setup_alert"), \
+		     patch("taxjar_integration.install.set_workspace_roles", create=True):
+			install.setup_taxjar()
+
+		self.assertEqual(order, ["fields", "backfill"])
 
 	def test_setup_applies_the_category_fixture_on_every_run(self):
 		"""Not only on the first run. create_tax_categories() inserts a code the
@@ -21365,7 +21387,12 @@ class TestTheNatureColumn(UnitTestCase):
 		from taxjar_integration.patches import backfill_transaction_nature as patch_module
 
 		made = []
-		with patch.object(patch_module.frappe.db, "has_column", return_value=False), patch.object(
+		# False to execute(), which then creates the column, and True to
+		# backfill_if_needed(), which asks again once it exists.
+		answers = iter([False, True])
+		with patch.object(
+			patch_module.frappe.db, "has_column", side_effect=lambda *args: next(answers)
+		), patch.object(patch_module, "_has_blank_row", return_value=True), patch.object(
 			patch_module, "_export_query"
 		) as export_query, patch.object(
 			patch_module, "_domestic_query"
@@ -21377,6 +21404,71 @@ class TestTheNatureColumn(UnitTestCase):
 		self.assertTrue(made, "the patch filled the column without creating it")
 		export_query.return_value.run.assert_called_once()
 		domestic_query.return_value.run.assert_called_once()
+
+	def test_the_backfill_stops_when_the_column_is_missing(self):
+		"""setup_taxjar() calls it on every migrate, including one that reaches a
+		site before make_custom_fields() has created the column."""
+		from taxjar_integration.patches import backfill_transaction_nature as patch_module
+
+		with patch.object(patch_module.frappe.db, "has_column", return_value=False), patch.object(
+			patch_module, "_export_query"
+		) as export_query, patch.object(patch_module, "_domestic_query") as domestic_query:
+			patch_module.backfill_if_needed()
+
+		export_query.assert_not_called()
+		domestic_query.assert_not_called()
+
+	def test_the_backfill_stops_when_no_row_holds_a_blank(self):
+		"""The two UPDATE statements scan the invoice table. This runs on every
+		migrate, so a site with nothing to fill pays one indexed read instead."""
+		from taxjar_integration.patches import backfill_transaction_nature as patch_module
+
+		with patch.object(patch_module.frappe.db, "has_column", return_value=True), patch.object(
+			patch_module, "_has_blank_row", return_value=False
+		), patch.object(patch_module, "_export_query") as export_query, patch.object(
+			patch_module, "_domestic_query"
+		) as domestic_query:
+			patch_module.backfill_if_needed()
+
+		export_query.assert_not_called()
+		domestic_query.assert_not_called()
+
+	def test_the_backfill_claims_the_exports_before_the_rest(self):
+		"""The domestic statement writes every row still blank, so it has to run
+		second or it would call an export domestic."""
+		from taxjar_integration.patches import backfill_transaction_nature as patch_module
+
+		order = []
+		with patch.object(patch_module.frappe.db, "has_column", return_value=True), patch.object(
+			patch_module, "_has_blank_row", return_value=True
+		), patch.object(
+			patch_module, "_export_query", side_effect=lambda: order.append("export") or MagicMock()
+		), patch.object(
+			patch_module, "_domestic_query", side_effect=lambda: order.append("domestic") or MagicMock()
+		):
+			patch_module.backfill_if_needed()
+
+		self.assertEqual(order, ["export", "domestic"])
+
+	def test_the_probe_tests_the_column_directly(self):
+		"""A function wrapped around a column cannot use that column's index, and
+		this column is indexed. COALESCE here would turn one indexed read into a
+		scan, which is the cost the probe exists to avoid."""
+		import inspect
+
+		from taxjar_integration.patches import backfill_transaction_nature as patch_module
+
+		source = inspect.getsource(patch_module._has_blank_row)
+
+		self.assertIn("isnull()", source)
+		self.assertNotIn("Coalesce", source)
+
+	def test_the_database_accepts_the_probe(self):
+		"""The one thing a mock cannot answer: whether this site runs the
+		statement at all. A read, so it writes nothing."""
+		from taxjar_integration.patches import backfill_transaction_nature as patch_module
+
+		self.assertIsInstance(patch_module._has_blank_row(), bool)
 
 	def test_the_database_accepts_the_filter(self):
 		"""The one thing a mock cannot answer: whether get_list takes these

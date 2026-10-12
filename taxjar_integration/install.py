@@ -1,5 +1,6 @@
 import frappe
 
+from taxjar_integration.patches.backfill_transaction_nature import backfill_if_needed
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	add_product_tax_categories,
 	hide_legacy_exempt_from_sales_tax,
@@ -147,6 +148,8 @@ def setup_taxjar():
 
 	* custom fields (the Customer/Sales Invoice ``taxjar_*`` columns) — created up
 	  front so the desk pages never query columns that don't exist (MySQLdb 1054);
+	* the transaction-nature backfill, for the invoices a site already held when
+	  this app was installed (patches/backfill_transaction_nature.py);
 	* the Product Tax Category master (~800 rows from the bundled fixture). Who may
 	  read or change it is set in its doctype JSON, not here. The fixture is
 	  applied on every run, not only on the first one: create_tax_categories()
@@ -164,6 +167,13 @@ def setup_taxjar():
 	  is populated by TaxJar on save, not on load.
 	"""
 	make_custom_fields()
+
+	# Installing an app records every patch in patches.txt as done without
+	# running one, so a site that already holds Sales Invoices never gets this
+	# backfill from its patch. It is called here as well, where it reaches both
+	# an install and a migrate. The probe inside keeps a migrate with nothing to
+	# do to one indexed read.
+	backfill_if_needed()
 
 	add_product_tax_categories()
 
