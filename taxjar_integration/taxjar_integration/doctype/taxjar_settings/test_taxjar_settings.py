@@ -23662,9 +23662,21 @@ class TestTheRemovalJobChecksTheCurrentList(UnitTestCase):
 		_get, _delete, mock_set = self._run({"A Co"}, delete_error=TaxJarNotConfiguredError("No token."))
 		mock_set.assert_not_called()
 
-	def test_a_permanent_failure_leaves_the_pending_list(self):
-		_get, _delete, mock_set = self._run({"A Co"}, delete_error=ValueError("bad"))
+	def test_a_rejection_by_taxjar_leaves_the_pending_list(self):
+		_get, _delete, mock_set = self._run({"A Co"}, delete_error=_response_error(422))
 		self.assertEqual(self._pending_after(mock_set), "")
+
+	def test_an_unclassified_failure_stays_pending(self):
+		"""Nothing sends a removal again once it leaves the list."""
+		_get, _delete, mock_set = self._run({"A Co"}, delete_error=KeyError("status"))
+		mock_set.assert_not_called()
+
+	def test_a_refused_token_stays_pending(self):
+		"""An admin fixes a refused token the same way as a missing one."""
+		for status in (401, 403):
+			with self.subTest(status=status):
+				_get, _delete, mock_set = self._run({"A Co"}, delete_error=_response_error(status))
+				mock_set.assert_not_called()
 
 	def test_nothing_happens_while_taxjar_is_off(self):
 		with patch(f"{_TJ}._is_taxjar_enabled", return_value=False), \

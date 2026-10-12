@@ -4545,9 +4545,9 @@ def remove_customer_from_company(customer_name, company):
 	its sync always runs after the DELETE and puts the customer back.
 
 	A failed DELETE keeps the company in taxjar_customer_pending_removals, and
-	retry_pending_customer_removals() queues it again. A DELETE that can never
-	succeed leaves the list, so the cron does not send it for ever. While
-	TaxJar is off, the job does nothing and the removal stays pending.
+	retry_pending_customer_removals() queues it again. A DELETE that TaxJar
+	refuses for good leaves the list, so the cron does not send it for ever.
+	While TaxJar is off, the job does nothing and the removal stays pending.
 	"""
 	if not _is_taxjar_enabled():
 		return
@@ -4571,7 +4571,7 @@ def remove_customer_from_company(customer_name, company):
 			# meets it again every tick until an admin adds the token.
 			if info["kind"] != "not_configured":
 				_get_taxjar_logger().error(traceback.format_exc())
-			if info["retryable"]:
+			if _keep_removal_pending(info):
 				return
 
 	pending = _pending_removals_of(customer.taxjar_customer_pending_removals)
@@ -4581,6 +4581,17 @@ def remove_customer_from_company(customer_name, company):
 			"taxjar_customer_pending_removals", _join_pending_removals(pending - {company}),
 			update_modified=False,
 		)
+
+
+def _keep_removal_pending(info):
+	"""True when a failed customer DELETE must stay in the pending list.
+
+	Nothing else sends a removal again once it leaves the list. So keep it for
+	every failure that a later try can get past: a retryable one, an error this
+	app cannot classify, and a token that TaxJar refuses (401 or 403), which an
+	admin fixes the same way as a missing token.
+	"""
+	return info["retryable"] or info["kind"] == "unknown" or cint(info["status"]) in (401, 403)
 
 
 def _locked_allowed_companies(customer_name):
