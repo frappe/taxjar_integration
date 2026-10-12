@@ -56,7 +56,7 @@
 .taxjar-setup .ts-body { padding: 16px 0 28px; flex: 1; }
 .taxjar-setup .ts-foot {
 	display: flex; align-items: center; gap: 10px;
-	padding: 18px 0; border-top: 1px solid var(--border-color);
+	padding: 18px 0;
 }
 .taxjar-setup .ts-grow { flex: 1; }
 /* Looks disabled but stays a real button — clicking it while gated still
