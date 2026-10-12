@@ -624,6 +624,9 @@
 }
 .taxjar-setup .ts-co-regions.ts-cfg-focus { color: var(--text-color); font-weight: 600; }
 
+/* One company: the card takes the full width. */
+.taxjar-setup .ts-cogrid > .ts-co-card:only-child { grid-column: 1 / -1; }
+
 /* ── The region count ─────────────────────────────────────────────
    A dotted underline says "there is more here", and the pointer cursor says
    the count reacts to the mouse. The underline sits under the text box that
