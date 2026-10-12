@@ -101,6 +101,8 @@ def get_legacy_check_state():
 		status = STATUS_FAILED
 
 	pending = {row.company: row for row in _permitted_pending_by_company()}
+	readable = _companies_with_readable_invoices(summary)
+	summary = {company: entry for company, entry in summary.items() if company in readable}
 	companies = []
 	for company in sorted(set(pending) | set(summary)):
 		row = pending.get(company)
@@ -159,6 +161,28 @@ def _permitted_pending_by_company():
 		fields=["company", {"COUNT": "*", "as": "invoices"}, {"MIN": "creation", "as": "first_created"}],
 		group_by="company",
 		limit_page_length=0,
+	)
+
+
+def _companies_with_readable_invoices(companies):
+	"""The companies, of those given, in which the caller may read a Sales
+	Invoice.
+
+	A summary entry holds invoice counts. The tab shows it only to a caller
+	who may read those invoices, the same rule _permitted_pending_by_company()
+	applies to the pending counts.
+	"""
+	if not companies:
+		return set()
+
+	return set(
+		frappe.get_list(
+			"Sales Invoice",
+			filters={"company": ["in", list(companies)]},
+			group_by="company",
+			pluck="company",
+			limit_page_length=0,
+		)
 	)
 
 

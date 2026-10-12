@@ -537,7 +537,7 @@ class TestGoingLive(UnitTestCase):
 
 
 class TestTheStateTheTabReads(UnitTestCase):
-	def _state(self, status, job_alive):
+	def _state(self, status, job_alive, readable=("Old Co",)):
 		values = frappe._dict(
 			legacy_cutoff_date="2026-10-01",
 			legacy_check_status=status,
@@ -546,6 +546,7 @@ class TestTheStateTheTabReads(UnitTestCase):
 		)
 		with patch(f"{_LC}.frappe.has_permission"), \
 		     patch(f"{_LC}.frappe.db.get_singles_dict", return_value=values), \
+		     patch(f"{_LC}._companies_with_readable_invoices", return_value=set(readable)), \
 		     patch(f"{_LC}.is_job_enqueued", return_value=job_alive), \
 		     patch(f"{_LC}._permitted_pending_by_company", return_value=[_pending("ACME", invoices=7)]), \
 		     patch(f"{_LC}.get_client", return_value=_client()) as get_client:
@@ -568,6 +569,36 @@ class TestTheStateTheTabReads(UnitTestCase):
 		self.assertEqual(by_company["Old Co"]["found"], 3)
 		self.assertEqual(state["pending"], 7)
 		self.assertEqual(state["cutoff_month"], "2026-10")
+
+	def test_a_finished_company_the_caller_cannot_read_is_left_out(self):
+		"""Its saved counts are invoice counts. The pending counts follow the
+		same rule, through frappe.get_list."""
+		state = self._state(STATUS_DONE, job_alive=False, readable=())
+
+		self.assertEqual([row["company"] for row in state["companies"]], ["ACME"])
+
+	def test_readable_companies_come_from_a_permission_checked_list(self):
+		with patch(f"{_LC}.frappe.get_list", return_value=["Old Co"]) as get_list:
+			readable = legacy_check._companies_with_readable_invoices({"Old Co": {}, "Other Co": {}})
+
+		self.assertEqual(readable, {"Old Co"})
+		self.assertEqual(get_list.call_args.args, ("Sales Invoice",))
+		self.assertEqual(get_list.call_args.kwargs["filters"], {"company": ["in", ["Old Co", "Other Co"]]})
+		self.assertEqual(get_list.call_args.kwargs["group_by"], "company")
+
+	def test_readable_companies_run_on_the_database(self):
+		company = frappe.db.get_value("Sales Invoice", {}, "company")
+		if not company:
+			self.skipTest("This site has no Sales Invoice.")
+
+		readable = legacy_check._companies_with_readable_invoices({company: {}, "No Such Company": {}})
+
+		self.assertEqual(readable, {company})
+
+	def test_no_summary_reads_nothing(self):
+		with patch(f"{_LC}.frappe.get_list") as get_list:
+			self.assertEqual(legacy_check._companies_with_readable_invoices({}), set())
+		get_list.assert_not_called()
 
 	def test_the_credential_is_the_live_one(self):
 		self._state(STATUS_DONE, job_alive=False)
