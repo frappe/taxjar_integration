@@ -1176,7 +1176,7 @@ class TaxJarSetup {
 		}
 
 		this.$body.html(`
-			<p class="ts-fieldnote">${__("Configure ship from address for accurate sales tax calculation.")}</p>
+			<p class="ts-fieldnote">${__("Configure ship from address for accurate sales tax calculation, you can add additional addresses later.")}</p>
 			<div class="ts-cardgrid ts-address-cards"></div>
 		`);
 
