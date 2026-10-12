@@ -854,6 +854,23 @@ class TestTheTab(UnitTestCase):
 		self.assertEqual(state["companies"], [])
 		self.assertEqual(state["pending"], 0)
 
+	def test_empty_dates_stay_empty_in_the_database_read(self):
+		"""The real read, with no mock of get_singles_dict. A cast read gives
+		0001-01-01 for an empty Date, and the tab then shows an upgrade."""
+		frappe.db.savepoint("empty_dates")
+		try:
+			frappe.db.set_single_value(
+				"TaxJar Settings", {"legacy_cutoff_date": None, "legacy_check_last_run": None}
+			)
+			with patch(f"{_LC}.require_permission"), \
+			     patch(f"{_LC}._permitted_pending_by_company", return_value=[]):
+				state = legacy_check.get_legacy_check_state()
+		finally:
+			frappe.db.rollback(save_point="empty_dates")
+
+		self.assertIsNone(state["cutoff_date"])
+		self.assertIsNone(state["last_run"])
+
 
 class TestTheInvoiceButton(UnitTestCase):
 	def test_no_sync_button_before_the_check_answers(self):

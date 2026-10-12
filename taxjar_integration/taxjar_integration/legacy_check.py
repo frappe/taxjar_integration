@@ -89,7 +89,9 @@ def get_legacy_check_state():
 	"""Everything the Migration tab shows."""
 	require_permission(SETTINGS, "read")
 
-	values = frappe.db.get_singles_dict(SETTINGS, cast=True)
+	# No cast: it turns an empty Date into 0001-01-01, and the tab would then
+	# show a site that never ran version 15 as one that upgraded.
+	values = frappe.db.get_singles_dict(SETTINGS)
 	status = values.legacy_check_status or STATUS_PENDING
 	summary = _load_summary(values.legacy_check_summary)
 
