@@ -52,7 +52,7 @@ The customer page shows the exemption and the sync status of each customer.
 
 ## Requirements
 
-- Frappe Framework and ERPNext, version 16.50 or later.
+- Frappe Framework and ERPNext, the `develop` branch.
 - Python 3.14 or later.
 - A TaxJar account and an API token for each company. Sign up at [app.taxjar.com](https://app.taxjar.com/api_sign_up).
 - A company with the country "United States". TaxJar calculates US sales tax only.
