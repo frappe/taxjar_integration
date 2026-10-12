@@ -16473,6 +16473,19 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 		self.assertNotIn("_play_setup_video_in_dialog", self._js())
 		self.assertNotIn("ts-video-dialog", self._setup_css())
 
+	def test_leaving_the_route_stops_the_walkthrough(self):
+		"""Leaving the route only hides the cached page, so a playing iframe
+		keeps its sound off-screen. The "hide" event removes the iframe and
+		puts the thumbnail back, for both screens."""
+		js = self._js()
+		self.assertIn('$(wrapper).on("hide", () => wrapper.taxjar_setup._stop_setup_video());', js)
+		stop = self._fn("_stop_setup_video() {")
+		self.assertIn('.ts-video.is-playing', stop)
+		self.assertIn('$video.find(".ts-video-frame").replaceWith($video.data("ts-play"));', stop)
+		self.assertIn('$video.removeClass("is-playing");', stop)
+		# Detached, not removed, so the thumbnail keeps its click handler.
+		self.assertIn('$video.data("ts-play", $play.detach());', self._fn("_play_setup_video_in_row() {"))
+
 	def test_the_walkthrough_opens_the_first_step_and_the_activated_screen(self):
 		"""One card, drawn by one method, in the two places a reader meets this
 		wizard: the first step, above the checklist, and the screen an activated

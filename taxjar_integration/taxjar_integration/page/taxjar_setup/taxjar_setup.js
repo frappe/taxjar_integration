@@ -33,6 +33,10 @@ frappe.pages["taxjar-setup"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 	wrapper.taxjar_setup = new TaxJarSetup(page);
+	// Leaving the route only hides this cached page, so a playing walkthrough
+	// keeps its sound with nothing on screen. frappe fires "hide" on the
+	// wrapper when another route takes its place.
+	$(wrapper).on("hide", () => wrapper.taxjar_setup._stop_setup_video());
 };
 
 frappe.pages["taxjar-setup"].on_page_show = function (wrapper) {
@@ -2328,10 +2332,14 @@ class TaxJarSetup {
 	// The row becomes the player. A 168x96 frame is a thumbnail, not something
 	// anybody can watch, so the card drops its side-by-side layout and gives the
 	// video the width - the description has done its job once the video runs.
+	//
+	// The thumbnail is detached, not removed, so _stop_setup_video can put it
+	// back with its click handler still bound.
 	_play_setup_video_in_row() {
 		const $video = this.$body.find(".ts-video").addClass("is-playing");
+		const $play = $video.find(".ts-video-play");
 		const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(SETUP_VIDEO_ID)}?autoplay=1&rel=0`;
-		$video.find(".ts-video-play").replaceWith(`
+		$play.after(`
 			<div class="ts-video-frame">
 				<iframe
 					src="${src}"
@@ -2342,5 +2350,16 @@ class TaxJarSetup {
 				></iframe>
 			</div>
 		`);
+		$video.data("ts-play", $play.detach());
+	}
+
+	// Removing the iframe is the one way to stop it: a cross-origin player
+	// takes no pause from this page. The row goes back to its thumbnail.
+	_stop_setup_video() {
+		this.$body.find(".ts-video.is-playing").each(function () {
+			const $video = $(this);
+			$video.find(".ts-video-frame").replaceWith($video.data("ts-play"));
+			$video.removeClass("is-playing");
+		});
 	}
 }
