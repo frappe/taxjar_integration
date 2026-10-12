@@ -64,7 +64,7 @@ taxjar_integration.REGION_NAMES_BY_COUNTRY = {
 
 // Where nexus is actually declared - TaxJar's own account settings. Nothing in
 // this app can add one, so every "no nexus" message points here.
-taxjar_integration.TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#states";
+taxjar_integration.TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#api-access:~:text=Nexus%20Address%20Configuration";
 
 // The app's own mark, the same file hooks.app_logo_url serves to the apps
 // screen - one asset, so a re-brand is one file and never leaves a second copy

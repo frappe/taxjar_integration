@@ -6877,7 +6877,7 @@ class TestSyncStatusRealtimeJS(UnitTestCase):
 		self.assertIn('rel="noopener noreferrer"', fn)
 
 		self.assertIn(
-			'taxjar_integration.TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#states";', js
+			'taxjar_integration.TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#api-access:~:text=Nexus%20Address%20Configuration";', js
 		)
 
 	def test_the_reason_says_nexus_is_not_configured(self):

@@ -61,7 +61,7 @@ const SETUP_VIDEO_POSTER = SETUP_VIDEO_ID
 // Same URL as taxjar_integration.TAXJAR_NEXUS_URL in the app bundle. Kept as
 // its own literal rather than read from there: this runs at module scope, and
 // a page script that throws on load takes the whole page with it.
-const TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#states";
+const TAXJAR_NEXUS_URL = "https://app.taxjar.com/account#api-access:~:text=Nexus%20Address%20Configuration";
 
 // verify_company_address's {"checked": false} outcomes. The call did not happen,
 // so none of these is a verdict about the address - each reads as a muted note
