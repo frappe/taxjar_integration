@@ -1,118 +1,132 @@
-# TaxJar Integration
+# TaxJar Integration for ERPNext
 
-TaxJar Integration for ERPNext (Frappe/ERPNext v16).
+The TaxJar Integration calculates US sales tax on your ERPNext sales documents. It also sends your submitted invoices and credit notes to TaxJar, so that TaxJar AutoFile can file your sales tax returns.
 
-This app calculates US sales tax using TaxJar, writes tax values back to ERPNext documents, and can create TaxJar order/refund transactions on submission/cancellation.
+![The TaxJar Integration workspace with the guided setup banner](.github/images/workspace.png)
 
 ## Features
 
-- Tax calculation hook on Quotation, Sales Order, and Sales Invoice validation.
-- Optional TaxJar transaction creation on Sales Invoice submit.
-- Optional TaxJar transaction deletion on Sales Invoice cancel.
-- Product Tax Category support for item-level TaxJar product tax codes.
-- Sandbox mode support.
-- UI-visible API diagnostics via TaxJar API Log DocType.
+- **Guided setup.** Six steps connect each company to TaxJar. You do not edit a settings form.
+- **Sales tax on each save.** The app calculates the tax on Quotation, Sales Order and Sales Invoice when you save a draft.
+- **Transaction sync.** The app sends submitted invoices and credit notes to TaxJar. It deletes them in TaxJar when you cancel them.
+- **More than one company.** Each company has its own API token, ledgers, address and features.
+- **Nexus from TaxJar.** The app reads your nexus states from TaxJar and updates them each day.
+- **Product tax categories.** You set a TaxJar category on each item, for example clothing or food.
+- **Customer exemptions.** You set exemptions on one customer or on many customers. The app sends them to TaxJar.
+- **Period close.** The TaxJar Transaction Sync page shows the sync status of each invoice and credit note.
+- **API log.** Each request to TaxJar and its response go into the TaxJar API Log.
 
-## Version Compatibility
+## Screenshots
 
-- Tested for Frappe/ERPNext v16.
+### Guided setup
+
+The Pre-requisites step lists what to prepare in TaxJar and in ERPNext before you connect.
+
+![The Pre-requisites step of the guided setup](.github/images/setup-prerequisites.png)
+
+The Connect step links each company to its TaxJar account.
+
+![The Connect step of the guided setup](.github/images/setup-connect.png)
+
+### Sales tax on an invoice
+
+The TaxJar tab shows the addresses, the Tax Applicability Matrix and the sync status.
+
+![The TaxJar tab of a Sales Invoice](.github/images/invoice-taxjar-tab.png)
+
+The TaxJar Tax Breakdown shows the tax for each jurisdiction.
+
+![The TaxJar Tax Breakdown of a Sales Invoice](.github/images/invoice-tax-breakdown.png)
+
+### Transaction sync
+
+The TaxJar Transaction Sync page shows the sync status of each invoice and credit note.
+
+![The TaxJar Transaction Sync page](.github/images/transaction-sync.png)
+
+### Customer exemptions
+
+The customer page shows the exemption and the sync status of each customer.
+
+![The TaxJar Customer Configuration page](.github/images/customer-exemptions.png)
+
+## Requirements
+
+- Frappe Framework and ERPNext, version 16.50 or later.
+- Python 3.14 or later.
+- A TaxJar account and an API token for each company. Sign up at [app.taxjar.com](https://app.taxjar.com/api_sign_up).
+- A company with the country "United States". TaxJar calculates US sales tax only.
 
 ## Installation
 
-From your bench folder:
+Run these commands in your bench folder:
 
 ```bash
-bench get-app taxjar_integration
+bench get-app https://github.com/frappe/taxjar_integration
 bench --site <site-name> install-app taxjar_integration
 bench --site <site-name> migrate
 ```
 
-## Dependency Management
+## Get started
 
-- Runtime dependencies are defined in [project.dependencies] in pyproject.toml.
-- pyproject.toml is the only build definition; there is no setup.py.
-- requirements.txt is a compatibility stub and not the source of truth.
+1. Open the **TaxJar** app from the ERPNext apps screen.
+2. Click **Go to guided setup experience →** in the blue banner.
+3. Complete the six steps: **Pre-requisites**, **Connect**, **Map Ledgers**, **Address**, **Features** and **Sync Nexus**.
+4. Set a product tax category on each item.
+5. Make a sales invoice and save it. The app adds a **Sales Tax** row with the amount from TaxJar.
+## User guide
 
-## Basic Configuration
+The full user guide is on the [ERPNext documentation](https://docs.frappe.io/erpnext/taxjar-guided-setup). It tells you how to:
 
-Open TaxJar Settings and configure:
+- prepare the TaxJar account, the API token and the ledgers,
+- complete the guided setup,
+- set nexus states, product tax categories and customer exemptions,
+- submit, return and cancel invoices,
+- close a period before TaxJar AutoFile files the return,
+- find and fix problems with the TaxJar API Log,
+- give users the correct roles.
 
-- Enable Tax Calculation
-- Sandbox Mode (optional, for testing)
-- Live API Key or Sandbox API Key
-- Company
-- Tax Account Head
-- Shipping Account Head
-- Create TaxJar Transaction (optional)
-- Enable TaxJar Logging (optional, enabled by default)
+## Development
 
-Notes:
+### Server tests
 
-- Tax Account Head should match the account where TaxJar tax is expected on invoices.
-- If a static Sales Taxes and Charges template is auto-applied, it can override expected TaxJar behavior.
-
-## How Tax Is Applied
-
-- Hook entrypoint: validate event for Quotation, Sales Order, Sales Invoice.
-- TaxJar payload uses company and customer shipping addresses plus item product tax codes.
-- Returned tax is added/updated as an Actual tax row using Tax Account Head.
-- Item fields tax_collectable and taxable_amount are populated from TaxJar breakdown where applicable.
-
-## TaxJar API Log (UI)
-
-Use TaxJar API Log in Desk to inspect calls and outcomes.
-
-Logging behavior:
-
-- When Enable TaxJar Logging is checked, TaxJar requests/responses/skips/errors are written to TaxJar API Log and file logs.
-- When Enable TaxJar Logging is unchecked, tax logic still runs, but no new TaxJar log entries are written.
-
-Each row captures:
-
-- action: tax_for_order, create_order, create_refund, delete_order, etc.
-- status: request, success, error, skipped
-- reference_doctype/reference_name (when available)
-- payload
-- response
-- error or skipped reason
-
-Typical skipped reasons include:
-
-- taxjar_calculate_tax is disabled
-- company is not in a supported context for the request
-- no nexus match for destination
-- TaxJar client credentials not configured
-- no matching sales tax amount for transaction creation
-
-## Troubleshooting
-
-If tax looks template-driven instead of TaxJar-driven:
-
-1. Remove/default-disable static Sales Taxes and Charges template for the test case.
-2. Ensure TaxJar Settings tax_account_head aligns with invoice tax account behavior.
-3. Confirm destination address and nexus setup.
-4. Confirm product tax category is present on item.
-5. Check TaxJar API Log for request/response and skipped/error reason.
-
-If code changes are not reflected:
+The server tests need a site with ERPNext and this app installed.
 
 ```bash
-bench --site <site-name> migrate
-bench restart
+bench --site <site-name> set-config allow_tests true
+bench --site <site-name> run-tests --app taxjar_integration
 ```
+
+### Client tests
+
+The client tests check the desk scripts. They use Vitest and need Node.js 24 or later. They do not need a site.
+
+```bash
+npm ci
+npm test
+```
+
+### Static checks
+
+The CI runs the [Frappe Semgrep rules](https://github.com/frappe/semgrep-rules) and the app convention checks:
+
+```bash
+python scripts/audit_conventions.py
+```
+
+### Dependencies
+
+- `pyproject.toml` holds the Python dependencies. The app has no `setup.py`.
+- `requirements.txt` is a stub for older tools. Do not add dependencies to it.
 
 ## Contributing
 
-Contributions are welcome.
-
-Recommended workflow:
-
 1. Fork the repository.
-2. Create a feature branch.
-3. Add or update tests where possible.
-4. Run bench migrate and validate on a v16 site.
-5. Open a pull request with clear reproduction steps and expected behavior.
+2. Make a branch from `develop`.
+3. Add or update the tests for your change.
+4. Run the server tests and the client tests.
+5. Open a pull request against `develop`. Give the steps to reproduce the problem and the expected result.
 
 ## License
 
-MIT
+MIT. Refer to [license.txt](license.txt).
