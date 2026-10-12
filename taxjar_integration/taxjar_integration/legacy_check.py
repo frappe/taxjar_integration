@@ -411,7 +411,7 @@ def _read_transaction_ids(client, company, windows, cache):
 
 
 def _list_ids(method, action, params, company):
-	ctx = {"doctype": "Company", "name": company, "check": "pre-upgrade invoices"}
+	ctx = {"doctype": "Company", "name": company, "company": company, "check": "pre-upgrade invoices"}
 	log_taxjar_call(action=action, status="request", payload=params, context=ctx)
 	try:
 		# The SDK answers with a TaxJarOrders object, for refunds too. It has no

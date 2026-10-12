@@ -149,6 +149,7 @@ def _write_taxjar_ui_log(log_data):
 
 	reference_doctype = (log_data.get("context") or {}).get("doctype")
 	reference_name = (log_data.get("context") or {}).get("name")
+	company = (log_data.get("context") or {}).get("company")
 
 	doc = frappe.get_doc(
 		{
@@ -157,6 +158,7 @@ def _write_taxjar_ui_log(log_data):
 			"status": log_data.get("status"),
 			"reference_doctype": reference_doctype,
 			"reference_name": reference_name,
+			"company": company,
 			"payload": json.dumps(log_data.get("payload"), default=str)
 			if log_data.get("payload") is not None
 			else None,
@@ -179,7 +181,8 @@ def _write_taxjar_ui_log(log_data):
 		return
 
 	# ignore_permissions: log writes must succeed regardless of the triggering user's role.
-	# TaxJar API Log is read-restricted to System Manager; this does not grant the user read access.
+	# This does not grant the user read access. Readers see only the rows of
+	# the companies their User Permissions allow.
 	doc.insert(ignore_permissions=True)
 
 
@@ -701,7 +704,7 @@ def resync_transaction(invoice_name: str):
 def sync_transaction_to_taxjar(invoice_name):
 	"""Background worker: create order/refund in TaxJar for a submitted Sales Invoice."""
 	doc = frappe.get_doc("Sales Invoice", invoice_name)
-	ctx = {"doctype": "Sales Invoice", "name": invoice_name}
+	ctx = {"doctype": "Sales Invoice", "name": invoice_name, "company": doc.company}
 
 	if doc.docstatus == 2:
 		delete_transaction_from_taxjar(invoice_name)
@@ -2534,13 +2537,14 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 	"""
 
 	client = get_client(company)
+	ctx = {"company": company}
 
 	if not client:
-		log_taxjar_call(action="tax_for_order", status="skipped", error="TaxJar client is not configured")
+		log_taxjar_call(action="tax_for_order", status="skipped", error="TaxJar client is not configured", context=ctx)
 		return
 
 	try:
-		log_taxjar_call(action="tax_for_order", status="request", payload=tax_dict)
+		log_taxjar_call(action="tax_for_order", status="request", payload=tax_dict, context=ctx)
 		tax_data = client.tax_for_order(tax_dict)
 	except taxjar.exceptions.TaxJarConnectionError:
 		log_taxjar_call(
@@ -2548,6 +2552,7 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			status="error",
 			payload=tax_dict,
 			error="TaxJar API is unreachable",
+			context=ctx,
 		)
 		capture("taxjar_tax_calculation_failed", kind="connection")
 		frappe.msgprint(
@@ -2562,6 +2567,7 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			status="error",
 			payload=tax_dict,
 			error=getattr(err, "full_response", str(err)),
+			context=ctx,
 		)
 		full = getattr(err, "full_response", None)
 		capture(
@@ -2581,11 +2587,12 @@ def validate_tax_request(tax_dict, company=None, address_context=None):
 			status="error",
 			payload=tax_dict,
 			error=traceback.format_exc(),
+			context=ctx,
 		)
 		capture("taxjar_tax_calculation_failed", kind="unexpected")
 		raise
 	else:
-		log_taxjar_call(action="tax_for_order", status="success", payload=tax_dict, response=tax_data)
+		log_taxjar_call(action="tax_for_order", status="success", payload=tax_dict, response=tax_data, context=ctx)
 		return tax_data
 
 

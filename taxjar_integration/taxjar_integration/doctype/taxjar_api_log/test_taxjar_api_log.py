@@ -17,7 +17,9 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 # link-field test record dependencies are recursively loaded
 # Use these module variables to add/remove to/from that list
 EXTRA_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
-IGNORE_TEST_RECORD_DEPENDENCIES = []  # eg. ["User"]
+# The company field links to Company, whose ERPNext test records these tests
+# do not need.
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Company"]
 
 
 class IntegrationTestTaxJarAPILog(IntegrationTestCase):
@@ -82,3 +84,22 @@ class IntegrationTestTaxJarAPILog(IntegrationTestCase):
 		self.assertTrue(perms[0].read)
 		for ptype in ("write", "create", "delete", "export", "share"):
 			self.assertFalse(perms[0].get(ptype), ptype)
+
+	def test_a_row_records_the_company_of_its_context(self):
+		"""User Permissions on Company filter the log through this field."""
+		with patch.object(Document, "insert", autospec=True) as insert:
+			_write_taxjar_ui_log(
+				{
+					"action": "create_order",
+					"status": "success",
+					"context": {"doctype": "Sales Invoice", "name": "SINV-1", "company": "ACME"},
+				}
+			)
+
+		self.assertEqual(insert.call_args.args[0].company, "ACME")
+
+	def test_the_company_is_a_link_to_company(self):
+		import frappe
+
+		field = frappe.get_meta("TaxJar API Log").get_field("company")
+		self.assertEqual((field.fieldtype, field.options), ("Link", "Company"))
