@@ -92,7 +92,7 @@ class CsatSurvey:
 		score = cint(score)
 		if score not in SCORES:
 			frappe.throw(_("Choose a score from 1 to 5."), title=_("Survey Not Recorded"))
-		if not self._is_open():
+		if not self._open_if_due():
 			return
 
 		answer = {"survey": SURVEY, "score": score}
@@ -105,7 +105,7 @@ class CsatSurvey:
 		capture("taxjar_csat_submitted", **answer)
 
 	def _dismissed(self):
-		if not self._is_open():
+		if not self._open_if_due():
 			return
 		self._close()
 		capture("taxjar_csat_dismissed", survey=SURVEY, permanent=False)
@@ -115,6 +115,15 @@ class CsatSurvey:
 		if self._is_open():
 			self._close()
 		capture("taxjar_csat_dismissed", survey=SURVEY, permanent=True)
+
+	def _open_if_due(self) -> bool:
+		"""True when the cycle is open, after opening it if the survey is due.
+
+		The card sends "shown" without waiting for it. If that request fails or
+		lands late, the answer still counts.
+		"""
+		self._shown()
+		return self._is_open()
 
 	def _can_ask(self) -> bool:
 		# With telemetry off, an answer cannot go anywhere, so do not ask.

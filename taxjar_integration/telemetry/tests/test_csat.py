@@ -84,9 +84,24 @@ class TestCsatSurvey(IntegrationTestCase):
 			self.survey.record("submitted", 7)
 		self.assertEqual(self.answers(), [])
 
-	def test_a_submit_without_an_open_cycle_sends_nothing(self):
+	def test_a_submit_when_the_survey_is_not_due_sends_nothing(self):
+		self.survey.record("shown")
+		self.survey.record("dismissed")
 		self.survey.record("submitted", 4)
 		self.assertEqual(self.answers(), [])
+
+	def test_a_submit_before_shown_still_counts(self):
+		self.survey.record("submitted", 4)
+
+		self.site_capture.assert_any_call("taxjar_csat_shown", survey="csat")
+		self.assertEqual(self.answers(), [{"survey": "csat", "score": 4}])
+		self.assertFalse(self.survey.is_due())
+
+	def test_a_dismiss_before_shown_still_hides_the_card(self):
+		self.survey.record("dismissed")
+
+		self.site_capture.assert_called_with("taxjar_csat_dismissed", survey="csat", permanent=False)
+		self.assertFalse(self.survey.is_due())
 
 	def test_dismissed_is_a_site_event_and_hides_the_card(self):
 		self.survey.record("shown")
