@@ -1,5 +1,6 @@
 import "./telemetry";
 import "./taxjar_utils";
+import "./address_quick_entry";
 import "./desk_sidebar";
 import "./csat_card";
 import "./components/data_table_manager";

@@ -2927,11 +2927,9 @@ class _MockAddress:
 		self.country = country
 		self.state = state
 		self.pincode = pincode
-		self._taxjar_state_code = taxjar_state_code
+		self.taxjar_state_code = taxjar_state_code
 
 	def get(self, key, default=None):
-		if key == "taxjar_state_code":
-			return self._taxjar_state_code
 		return getattr(self, key, default)
 
 
@@ -2973,14 +2971,31 @@ class TestValidateAddress(UnitTestCase):
 			self._call(doc, "US")
 
 	def test_us_missing_taxjar_state_code_throws(self):
-		doc = _MockAddress(country="United States", state="California", taxjar_state_code=None, pincode="90210")
+		doc = _MockAddress(country="United States", state="Narnia", taxjar_state_code=None, pincode="90210")
 		with self.assertRaises(frappe.exceptions.ValidationError):
 			self._call(doc, "US")
 
 	def test_us_empty_taxjar_state_code_throws(self):
-		doc = _MockAddress(country="United States", state="California", taxjar_state_code="", pincode="90210")
+		doc = _MockAddress(country="United States", state="Narnia", taxjar_state_code="", pincode="90210")
 		with self.assertRaises(frappe.exceptions.ValidationError):
 			self._call(doc, "US")
+
+	# The Customer quick entry makes an Address with a state and no state code.
+
+	def test_us_state_name_fills_taxjar_state_code(self):
+		doc = _MockAddress(country="United States", state="New York", taxjar_state_code=None, pincode="10011")
+		self._call(doc, "US")
+		self.assertEqual(doc.taxjar_state_code, "NY")
+
+	def test_us_state_code_in_state_box_fills_taxjar_state_code(self):
+		doc = _MockAddress(country="United States", state=" ny ", taxjar_state_code="", pincode="10011")
+		self._call(doc, "US")
+		self.assertEqual(doc.taxjar_state_code, "NY")
+
+	def test_us_stored_taxjar_state_code_is_kept(self):
+		doc = _MockAddress(country="United States", state="New York", taxjar_state_code="NJ", pincode="07302")
+		self._call(doc, "US")
+		self.assertEqual(doc.taxjar_state_code, "NJ")
 
 	def test_us_missing_pincode_throws(self):
 		doc = _MockAddress(country="United States", state="California", taxjar_state_code="CA", pincode=None)
@@ -3038,6 +3053,50 @@ class TestValidateAddress(UnitTestCase):
 	def test_uk_no_fields_required(self):
 		doc = _MockAddress(country="United Kingdom", state=None, taxjar_state_code=None, pincode=None)
 		self._call(doc, "GB")  # must not raise
+
+
+class TestCopyQuickEntryCodes(UnitTestCase):
+	"""The Customer quick entry carries the codes on the Customer, and the
+	hook moves them to the Address that ERPNext made from it."""
+
+	_MOD = "taxjar_integration.taxjar_integration.taxjar_integration"
+
+	def _call(self, country_code, address_codes=None, is_new=True, **customer_codes):
+		from taxjar_integration.taxjar_integration.taxjar_integration import copy_quick_entry_codes
+
+		customer = frappe._dict(customer_primary_address="ADDR-1", flags=frappe._dict(is_new_doc=is_new))
+		customer.update(customer_codes)
+		address = MagicMock(country="Somewhere")
+		address.get.side_effect = (address_codes or {}).get
+		with patch(f"{self._MOD}.frappe.get_doc", return_value=address), patch(
+			f"{self._MOD}.frappe.db.get_value", return_value=country_code
+		):
+			copy_quick_entry_codes(customer)
+		return address
+
+	def test_us_state_code_is_copied(self):
+		address = self._call("US", {"taxjar_state_code": "NY"}, taxjar_state_code="nj")
+		address.db_set.assert_called_once_with("taxjar_state_code", "NJ")
+
+	def test_region_code_is_copied_outside_the_us(self):
+		address = self._call("CA", {"taxjar_region_code": "ON"}, taxjar_region_code="QC")
+		address.db_set.assert_called_once_with("taxjar_region_code", "QC")
+
+	def test_the_code_the_country_does_not_read_is_ignored(self):
+		address = self._call("CA", {}, taxjar_state_code="NY")
+		address.db_set.assert_not_called()
+
+	def test_an_unknown_us_code_is_ignored(self):
+		address = self._call("US", {"taxjar_state_code": "NY"}, taxjar_state_code="ZZ")
+		address.db_set.assert_not_called()
+
+	def test_the_same_code_is_not_written_again(self):
+		address = self._call("US", {"taxjar_state_code": "NY"}, taxjar_state_code="NY")
+		address.db_set.assert_not_called()
+
+	def test_an_existing_customer_is_left_alone(self):
+		address = self._call("US", {}, is_new=False, taxjar_state_code="NY")
+		address.db_set.assert_not_called()
 
 
 # ── Phase 3: Address desk client script ──────────────────────────────────────

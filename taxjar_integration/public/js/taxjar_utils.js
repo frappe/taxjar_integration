@@ -668,13 +668,19 @@ taxjar_integration._region_code_hint = function (is_placeholder, has_state) {
 	return is_placeholder ? __("Cannot find region code, using fallback code.") : "";
 };
 
+// The country box of an address dialog. ERPNext's Customer quick entry names
+// it country_address, because "country" is already a field on the Customer.
+taxjar_integration._dialog_country = function (d) {
+	return d.get_value(d.__taxjar_country_field || "country");
+};
+
 // The country decides which code box the reader is filling, so a change to the
 // state or to the country settles both: the state code for a United States
 // sale, the region code for every other one.
 taxjar_integration._refresh_dialog_codes = function (d) {
 	if (!d) return;
 
-	if (d.get_value("country") === "United States") {
+	if (taxjar_integration._dialog_country(d) === "United States") {
 		return taxjar_integration._fill_dialog_state_code(d);
 	}
 
@@ -729,7 +735,7 @@ taxjar_integration._refresh_dialog_region = function (d) {
 
 	// The United States answer is taxjar_state_code on the Address, and the box
 	// is hidden here.
-	if (d.get_value("country") === "United States") return;
+	if (taxjar_integration._dialog_country(d) === "United States") return;
 
 	// Only what this dialog wrote is replaced. A code the reader typed is their
 	// answer, and an edit to the state does not make it ours to overwrite. The
@@ -739,6 +745,11 @@ taxjar_integration._refresh_dialog_region = function (d) {
 
 	const has_state = !!(d.get_value("state") || "").trim();
 
+	// What the box holds when no region matches. A quick entry sets "" - the
+	// Address form leaves the box empty there too, and the save works out the
+	// code again - so only this app's own dialogs write the stand-in.
+	const fallback = d.__taxjar_region_fallback ?? taxjar_integration.UNKNOWN_REGION_CODE;
+
 	const apply = (code) => {
 		const is_placeholder = code === taxjar_integration.UNKNOWN_REGION_CODE;
 
@@ -747,7 +758,9 @@ taxjar_integration._refresh_dialog_region = function (d) {
 		d.set_df_property(
 			"taxjar_region_code",
 			"description",
-			taxjar_integration._region_code_hint(is_placeholder, has_state)
+			!code && has_state
+				? __("Cannot find region code.")
+				: taxjar_integration._region_code_hint(is_placeholder, has_state)
 		);
 		// The red outline asks for an answer. This is one, so it goes -
 		// _mark_missing_fields clears it on a keystroke for the same reason,
@@ -758,19 +771,19 @@ taxjar_integration._refresh_dialog_region = function (d) {
 	// Nothing to work out without a region name. The stand-in is what the
 	// server would answer, so the trip is skipped rather than made.
 	if (!has_state) {
-		return apply(taxjar_integration.UNKNOWN_REGION_CODE);
+		return apply(fallback);
 	}
 
 	return frappe
 		.xcall("taxjar_integration.taxjar_integration.taxjar_integration.resolve_region_code", {
-			country: d.get_value("country"),
+			country: taxjar_integration._dialog_country(d),
 			state: d.get_value("state"),
 		})
 		.then((answer) => {
 			if (lookup !== d.__taxjar_region_lookup) return;
 			// A code the reader typed while the lookup ran is their answer.
 			if ((d.get_value("taxjar_region_code") || "").trim() !== current) return;
-			apply((answer && answer.region_code) || taxjar_integration.UNKNOWN_REGION_CODE);
+			apply((answer && answer.region_code) || fallback);
 		});
 };
 

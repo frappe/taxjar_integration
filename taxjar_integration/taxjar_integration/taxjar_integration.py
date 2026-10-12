@@ -3079,6 +3079,13 @@ def validate_address(doc, method):
 	if country_code != "US":
 		return
 
+	# The Address form fills the code from the state, but an address made
+	# anywhere else never sees that script. The Customer quick entry is one:
+	# ERPNext builds that Address from a fixed list of fields, and this one is
+	# not on it.
+	if not doc.get("taxjar_state_code"):
+		doc.taxjar_state_code = _us_state_code(doc.state)
+
 	if not doc.get("taxjar_state_code"):
 		frappe.throw(
 			_("State Code is required for United States addresses - it decides which state's sales tax applies."),
@@ -3090,6 +3097,44 @@ def validate_address(doc, method):
 			_("Postal Code is required for United States addresses, and decides the tax rate."),
 			title=_("Postal Code Required"),
 		)
+
+
+def copy_quick_entry_codes(doc, method=None):
+	"""Put the codes from the Customer quick entry on the Address it made.
+
+	The dialog holds the State Code and Region Code boxes, but ERPNext makes
+	the primary Address from a fixed list of fields, and the two codes are not
+	on it. They arrive on the Customer instead, and the save has already filled
+	the Address from its state - see validate_address(). A code the reader
+	picked is their answer, so it replaces that one.
+
+	Only the code the country reads. The dialog keeps a value in a box that a
+	later country change hid.
+	"""
+	if not doc.flags.is_new_doc or not doc.get("customer_primary_address"):
+		return
+
+	address = frappe.get_doc("Address", doc.customer_primary_address)
+	country_code = (frappe.db.get_value("Country", address.country, "code", cache=True) or "").upper()
+	fieldname = "taxjar_state_code" if country_code == "US" else "taxjar_region_code"
+
+	code = (doc.get(fieldname) or "").strip().upper()
+	if country_code == "US" and code not in US_STATE_NAMES:
+		return
+	if code and code != address.get(fieldname):
+		address.db_set(fieldname, code)
+
+
+def _us_state_code(state):
+	"""The two-letter code for a United States state, typed as a code or a name.
+
+	The server half of us_state_code_from_name() in taxjar_utils.js, and "" for
+	anything outside US_STATE_NAMES.
+	"""
+	wanted = _plain_name(state)
+	if wanted in US_STATE_NAMES:
+		return wanted
+	return next((code for code, name in US_STATE_NAMES.items() if _plain_name(name) == wanted), "")
 
 
 def set_address_region_code(doc, method=None):

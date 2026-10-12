@@ -194,7 +194,11 @@ doc_events = {
 	},
 	"Customer": {
 		"validate": "taxjar_integration.taxjar_integration.taxjar_integration.on_customer_validate",
-		"on_update": "taxjar_integration.taxjar_integration.taxjar_integration.on_customer_update",
+		"on_update": [
+			"taxjar_integration.taxjar_integration.taxjar_integration.on_customer_update",
+			# After ERPNext's own on_update, which makes the primary Address.
+			"taxjar_integration.taxjar_integration.taxjar_integration.copy_quick_entry_codes",
+		],
 		"after_delete": "taxjar_integration.taxjar_integration.taxjar_integration.on_customer_delete",
 	},
 	"Workspace": {
