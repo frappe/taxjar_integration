@@ -134,6 +134,7 @@ frappe
 
 def after_install():
 	setup_taxjar()
+	set_default_print_format()
 
 
 def after_migrate():
@@ -331,3 +332,42 @@ def keep_guided_setup_alert(doc, method):
 		return
 	_ensure_guided_setup_alert_block()
 	_splice_guided_setup_alert_into_content(doc)
+
+
+# The app's own Sales Invoice print format. It prints an invoice, a debit note
+# and a credit note.
+PRINT_FORMAT = "US Sales Tax (Invoice, DN, CN)"
+
+
+def set_default_print_format():
+	"""Make PRINT_FORMAT the default print format of Sales Invoice.
+
+	Only when Sales Invoice has no default yet. A default that the site chose
+	stays.
+
+	On install, and once on an upgrade - see the set_default_print_format
+	patch. Not on every migrate: a site that clears the default later keeps it
+	clear.
+
+	The Property Setter names this app's module. Frappe ignores it while the
+	site disables the app, and deletes it when the site uninstalls the app.
+	The print format goes with the app, so the default must go too.
+	"""
+	if frappe.get_meta("Sales Invoice").default_print_format:
+		return
+	if not frappe.db.exists("Print Format", PRINT_FORMAT):
+		return
+
+	frappe.get_doc(
+		{
+			"doctype": "Property Setter",
+			"doctype_or_field": "DocType",
+			"doc_type": "Sales Invoice",
+			"property": "default_print_format",
+			"property_type": "Data",
+			"value": PRINT_FORMAT,
+			"module": "TaxJar Integration",
+			"is_system_generated": 1,
+		}
+	).insert(ignore_permissions=True)
+	frappe.clear_cache(doctype="Sales Invoice")

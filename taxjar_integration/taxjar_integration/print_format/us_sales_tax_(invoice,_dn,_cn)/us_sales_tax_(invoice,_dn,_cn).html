@@ -2,14 +2,14 @@
 	Visual language (fonts, palette, rounded highlight-bg tables, page-break/
 	letterhead/footer wrapper) matches erpnext's own "Sales Invoice with Item
 	Image" (erpnext/accounts/print_format/sales_invoice_with_item_image) -
-	see us_sales_tax_invoice.css. Everything below the item table is this
+	see us_sales_tax_(invoice,_dn,_cn).css. Everything below the item table is this
 	app's own: the nexus/exemption panel, the shipping taxability note, and
 	the optional detailed jurisdiction breakdown. The item rows carried a
 	per-line Taxable/Exempt tag until 2026-09-30; it read the item's tax
 	category code, which says nothing about whether the line was taxed.
 #}
 <style>
-	{% include "taxjar_integration/taxjar_integration/print_format/us_sales_tax_invoice/us_sales_tax_invoice.css" %}
+	{% include "taxjar_integration/taxjar_integration/print_format/us_sales_tax_(invoice,_dn,_cn)/us_sales_tax_(invoice,_dn,_cn).css" %}
 </style>
 
 {#

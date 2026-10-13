@@ -2250,7 +2250,7 @@ def _stored_breakdown(doc):
 
 
 def _is_exempt_for_display(doc):
-	"""The same exemption test the US Sales Tax Invoice print format applies:
+	"""The same exemption test the US Sales Tax (Invoice, DN, CN) print format applies:
 	exemption only means something once there is nexus to be exempt from."""
 	return bool(getattr(doc, "taxjar_has_nexus", None)) and (
 		not getattr(doc, "taxjar_customer_taxable", None)
@@ -2346,7 +2346,7 @@ def _zero_tax_reason(doc, data):
 
 
 def get_taxjar_print_context(doc):
-	"""Jinja method for the US Sales Tax Invoice print format: why the
+	"""Jinja method for the US Sales Tax (Invoice, DN, CN) print format: why the
 	document is exempt, and, when TaxJar charged nothing, why."""
 	data = _stored_breakdown(doc)
 	return frappe._dict(

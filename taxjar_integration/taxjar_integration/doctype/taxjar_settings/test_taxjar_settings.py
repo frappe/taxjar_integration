@@ -2010,7 +2010,7 @@ class TestGetLineItemDict(UnitTestCase):
 
 
 class TestPrintFormatLineFigures(UnitTestCase):
-	"""The US Sales Tax Invoice's own Rate and Discount columns.
+	"""The US Sales Tax (Invoice, DN, CN) format's own Rate and Discount columns.
 
 	A standard print format keeps its HTML in the app file, so this reads that
 	file, pulls out the three expressions the item row sets, and renders them.
@@ -2031,7 +2031,7 @@ class TestPrintFormatLineFigures(UnitTestCase):
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as f:
 			html = f.read()
@@ -6900,7 +6900,7 @@ class TestSyncStatusRealtimeJS(UnitTestCase):
 		import os
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..", "print_format",
-			"us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as f:
 			self.assertIn('_("Nexus not configured for {0}")', f.read())
@@ -13157,7 +13157,7 @@ class TestTaxjarPrintContext(UnitTestCase):
 
 		base = os.path.dirname(__file__)
 		with open(os.path.normpath(os.path.join(
-			base, "..", "..", "print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			base, "..", "..", "print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))) as f:
 			header = f.read().split("#}")[0]
 		with open(os.path.normpath(os.path.join(base, "..", "..", "..", "hooks.py"))) as f:
@@ -13174,7 +13174,7 @@ class TestTaxjarPrintContext(UnitTestCase):
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as f:
 			html = f.read()
@@ -13192,7 +13192,7 @@ class TestTaxjarPrintContext(UnitTestCase):
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as f:
 			html = f.read()
@@ -22254,14 +22254,14 @@ class TestItemTaxFieldNames(UnitTestCase):
 
 	def test_print_format_does_not_read_the_old_field(self):
 		"""Failure mode 2. A site-level Print Format query cannot see this one:
-		US Sales Tax Invoice is a standard format, so its HTML lives in the app
+		US Sales Tax (Invoice, DN, CN) format is a standard format, so its HTML lives in the app
 		file rather than in the html column. The format no longer prints
 		per-item taxability, so it reads neither name."""
 		import os
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as f:
 			html = f.read()
@@ -24345,7 +24345,7 @@ class TestNexusPageIsReadOnlyForATaxJarUser(UnitTestCase):
 
 
 class TestTaxBreakdownAlwaysPrints(UnitTestCase):
-	"""The US Sales Tax Invoice prints its jurisdiction table with no setting.
+	"""The US Sales Tax (Invoice, DN, CN) format prints its jurisdiction table with no setting.
 
 	It used to read "Show Detailed TaxJar Tax Breakdown" from Print Settings.
 	The table is the reason the format exists, so it now always prints when
@@ -24363,7 +24363,7 @@ class TestTaxBreakdownAlwaysPrints(UnitTestCase):
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as handle:
 			return handle.read()
@@ -24446,7 +24446,7 @@ class TestRemoveTaxBreakdownPrintSetting(UnitTestCase):
 
 
 class TestChargeRowsPrintTheirDescriptionOnly(UnitTestCase):
-	"""An extra charge in the US Sales Tax Invoice totals prints one line.
+	"""An extra charge in the US Sales Tax (Invoice, DN, CN) format totals prints one line.
 
 	It used to print the ledger under the description as well. ERPNext fills a
 	charge's description with the account name, so the two lines said the same
@@ -24461,7 +24461,7 @@ class TestChargeRowsPrintTheirDescriptionOnly(UnitTestCase):
 
 		path = os.path.normpath(os.path.join(
 			os.path.dirname(__file__), "..", "..",
-			"print_format", "us_sales_tax_invoice", "us_sales_tax_invoice.html",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
 		))
 		with open(path) as handle:
 			return handle.read()
@@ -24692,3 +24692,110 @@ class TestUncalledEndpointsAreGone(UnitTestCase):
 		from taxjar_integration.taxjar_integration import taxjar_integration as mod
 
 		self.assertTrue(callable(mod._validate_address_with_taxjar))
+
+
+class TestDefaultPrintFormat(UnitTestCase):
+	"""The app's print format becomes the Sales Invoice default, but only where
+	Sales Invoice has no default yet. Its old name, "US Sales Tax Invoice", is
+	renamed before the model sync."""
+
+	def _set(self, default=None, format_exists=True):
+		from taxjar_integration import install
+
+		meta = MagicMock(default_print_format=default)
+		with patch.object(install.frappe, "get_meta", return_value=meta), \
+		     patch.object(install.frappe.db, "exists", return_value=format_exists), \
+		     patch.object(install.frappe, "get_doc") as get_doc, \
+		     patch.object(install.frappe, "clear_cache"):
+			install.set_default_print_format()
+		return get_doc
+
+	def test_an_empty_default_gets_the_app_format(self):
+		from taxjar_integration import install
+
+		get_doc = self._set()
+
+		row = get_doc.call_args.args[0]
+		self.assertEqual(row["doctype"], "Property Setter")
+		self.assertEqual(row["doctype_or_field"], "DocType")
+		self.assertEqual(row["doc_type"], "Sales Invoice")
+		self.assertEqual(row["property"], "default_print_format")
+		self.assertEqual(row["value"], install.PRINT_FORMAT)
+		get_doc.return_value.insert.assert_called_once_with(ignore_permissions=True)
+
+	def test_the_row_names_the_app_module(self):
+		"""Frappe ignores the row while the app is disabled, and deletes it when
+		the app is uninstalled, together with the print format it names."""
+		row = self._set().call_args.args[0]
+		self.assertEqual(row["module"], "TaxJar Integration")
+
+	def test_a_default_the_site_chose_stays(self):
+		self._set(default="Sales Invoice with Item Image").assert_not_called()
+
+	def test_nothing_is_set_when_the_format_is_missing(self):
+		self._set(format_exists=False).assert_not_called()
+
+	def test_install_sets_the_default_and_migrate_does_not(self):
+		"""A site that clears the default later keeps it clear."""
+		import inspect
+
+		from taxjar_integration import install
+
+		self.assertIn("set_default_print_format()", inspect.getsource(install.after_install))
+		self.assertNotIn("set_default_print_format", inspect.getsource(install.after_migrate))
+		self.assertNotIn("set_default_print_format", inspect.getsource(install.setup_taxjar))
+
+	def test_the_files_carry_the_new_name(self):
+		"""Frappe finds a standard print format by the scrubbed name, so the
+		folder, the files and the include path must all follow it."""
+		import os
+
+		from taxjar_integration import install
+
+		folder = frappe.scrub(install.PRINT_FORMAT)
+		base = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "print_format", folder))
+		with open(os.path.join(base, f"{folder}.json")) as f:
+			self.assertEqual(json.load(f)["name"], install.PRINT_FORMAT)
+		with open(os.path.join(base, f"{folder}.html")) as f:
+			self.assertIn(f"print_format/{folder}/{folder}.css", f.read())
+		self.assertTrue(os.path.exists(os.path.join(base, f"{folder}.css")))
+
+	def test_the_rename_runs_before_the_model_sync(self):
+		"""After the sync, the new JSON would make a second record and leave
+		the old one with no files."""
+		import os
+
+		path = os.path.join(frappe.get_app_path("taxjar_integration"), "patches.txt")
+		with open(path) as f:
+			pre, post = f.read().split("[post_model_sync]")
+		self.assertIn("taxjar_integration.patches.rename_us_sales_tax_print_format", pre)
+		self.assertIn("taxjar_integration.patches.set_default_print_format", post)
+
+	def _rename(self, old_exists, new_exists):
+		from taxjar_integration.patches import rename_us_sales_tax_print_format as patch_module
+
+		names = {"US Sales Tax Invoice": old_exists, "US Sales Tax (Invoice, DN, CN)": new_exists}
+		with patch.object(patch_module.frappe.db, "exists", side_effect=lambda dt, name: names[name]), \
+		     patch.object(patch_module.frappe, "rename_doc") as rename_doc, \
+		     patch.object(patch_module.frappe, "delete_doc") as delete_doc:
+			patch_module.execute()
+		return rename_doc, delete_doc
+
+	def test_the_old_format_is_renamed(self):
+		rename_doc, delete_doc = self._rename(old_exists=True, new_exists=False)
+		rename_doc.assert_called_once_with(
+			"Print Format", "US Sales Tax Invoice", "US Sales Tax (Invoice, DN, CN)", force=True
+		)
+		delete_doc.assert_not_called()
+
+	def test_an_old_format_beside_the_new_one_is_deleted(self):
+		rename_doc, delete_doc = self._rename(old_exists=True, new_exists=True)
+		rename_doc.assert_not_called()
+		delete_doc.assert_called_once_with(
+			"Print Format", "US Sales Tax Invoice", ignore_missing=True, force=True
+		)
+
+	def test_a_site_without_the_old_format_is_left_alone(self):
+		rename_doc, delete_doc = self._rename(old_exists=False, new_exists=True)
+		rename_doc.assert_not_called()
+		delete_doc.assert_not_called()

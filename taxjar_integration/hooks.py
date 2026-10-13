@@ -80,7 +80,7 @@ doctype_js = {
 
 # add methods and filters to jinja environment
 #
-# get_company_config: exposed so the "US Sales Tax Invoice" print format can
+# get_company_config: exposed so the "US Sales Tax (Invoice, DN, CN)" print format can
 # identify which Sales Taxes and Charges row is the TaxJar sales-tax row and
 # which is the shipping row (company_config.tax_account_head /
 # shipping_account_head) without re-deriving that lookup in the template.
