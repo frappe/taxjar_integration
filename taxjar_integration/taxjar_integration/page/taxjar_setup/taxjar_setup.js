@@ -45,19 +45,24 @@ frappe.pages["taxjar-setup"].on_page_show = function (wrapper) {
 
 const AUTOFILE_DOC_URL = "https://support.taxjar.com/article/908-how-does-autofile-work";
 
-// The walkthrough the success screen offers once setup is activated. Held as a
-// bare video id, not a watch URL, because the screen embeds it rather than
-// linking out - the id is the only part of a YouTube URL an embed needs, and
-// swapping the video is then a one-token edit. Temporary link; replace the id
-// when the final walkthrough is published. Empty string drops the whole player
-// row rather than shipping a play button that opens nothing.
-const SETUP_VIDEO_ID = "qSP820YuqX4";
+// The two videos the page plays. Each is a bare video id, not a watch URL,
+// because the page embeds it rather than linking out - the id is the only part
+// of a YouTube URL an embed needs, and swapping a video is then a one-token
+// edit. An empty string drops that player row rather than shipping a play
+// button that opens nothing.
+//
+// SETUP_VIDEO_ID is the setup walkthrough on the first wizard screen.
+// WALKTHROUGH_VIDEO_ID is the video on the "TaxJar is configured" screen. It is
+// a temporary link; replace the id when that video is published.
+const SETUP_VIDEO_ID = "2RnyQMNnjME";
+const WALKTHROUGH_VIDEO_ID = "qSP820YuqX4";
+
 // The video's own thumbnail host. maxresdefault only exists for videos uploaded
 // above 720p, so it 404s on plenty of them; hqdefault is generated for every
-// video and is the fallback (see the error handler on .ts-done-thumb).
-const SETUP_VIDEO_POSTER = SETUP_VIDEO_ID
-	? `https://i.ytimg.com/vi/${encodeURIComponent(SETUP_VIDEO_ID)}`
-	: "";
+// video and is the fallback (see the error handler on .ts-video-thumb).
+function video_poster(video_id) {
+	return `https://i.ytimg.com/vi/${encodeURIComponent(video_id)}`;
+}
 // Same URL as taxjar_integration.TAXJAR_NEXUS_URL in the app bundle. Kept as
 // its own literal rather than read from there: this runs at module scope, and
 // a page script that throws on load takes the whole page with it.
@@ -438,6 +443,7 @@ class TaxJarSetup {
 
 		this.$body.html(`
 			${this._video_card({
+				video_id: SETUP_VIDEO_ID,
 				title: __("Setup TaxJar"),
 				description: __("Quick walkthrough to get your API keys & configure nexus."),
 			})}
@@ -2275,6 +2281,7 @@ class TaxJarSetup {
 				<div class="ts-done-action"></div>
 			</div>
 			${this._video_card({
+				video_id: WALKTHROUGH_VIDEO_ID,
 				title: __("Walkthrough"),
 				description: __("See auto sales-tax computation and transaction syncing with TaxJar in action."),
 			})}
@@ -2286,23 +2293,25 @@ class TaxJarSetup {
 	// yet, and the activated screen offers the same video to somebody whose
 	// setup already runs.
 	//
-	// The words are all that differ. The markup, the facade, the thumbnail
-	// fallback, the player and the rules stay here, so the rest cannot drift.
+	// The video and the words are all that differ. The markup, the facade, the
+	// thumbnail fallback, the player and the rules stay here, so the rest cannot
+	// drift. The row holds its own video id, and the player reads it from there.
 	//
 	// A facade, not an embed: one image from i.ytimg.com, and nothing from
 	// youtube.com loads for somebody who never presses play. No duration in the
 	// label - the video can be re-cut without this line going quietly wrong,
 	// and a wrong duration is worse than none.
 	//
-	// An empty SETUP_VIDEO_ID drops the row rather than shipping a play button
-	// that opens nothing.
-	_video_card({ title, description }) {
-		if (!SETUP_VIDEO_ID) return "";
+	// An empty video id drops the row rather than shipping a play button that
+	// opens nothing.
+	_video_card({ video_id, title, description }) {
+		if (!video_id) return "";
 
+		const id = frappe.utils.escape_html(video_id);
 		return `
-			<div class="ts-video">
+			<div class="ts-video" data-video-id="${id}">
 				<button type="button" class="ts-video-play" aria-label="${__("Play the TaxJar walkthrough")}">
-					<img class="ts-video-thumb" src="${SETUP_VIDEO_POSTER}/maxresdefault.jpg" alt="">
+					<img class="ts-video-thumb" src="${video_poster(video_id)}/maxresdefault.jpg" alt="">
 					<span class="ts-video-mark">
 						<svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M3 1.5 10 6l-7 4.5Z"/></svg>
 					</span>
@@ -2317,7 +2326,10 @@ class TaxJarSetup {
 
 	// Both places play the video in the row itself.
 	_bind_setup_video() {
-		this.$body.find(".ts-video-play").on("click", () => this._play_setup_video_in_row());
+		const page = this;
+		this.$body.find(".ts-video-play").on("click", function () {
+			page._play_setup_video_in_row($(this).closest(".ts-video"));
+		});
 		// Bound here rather than an inline onerror="" attribute, like every other
 		// handler on this page. Safe to bind after inserting the <img>: the
 		// browser cannot fire error before this synchronous block returns.
@@ -2325,7 +2337,7 @@ class TaxJarSetup {
 		// maxresdefault only exists for videos uploaded above 720p, so it 404s on
 		// plenty of them; hqdefault is generated for every video.
 		this.$body.find(".ts-video-thumb").one("error", function () {
-			this.src = `${SETUP_VIDEO_POSTER}/hqdefault.jpg`;
+			this.src = `${video_poster($(this).closest(".ts-video").data("video-id"))}/hqdefault.jpg`;
 		});
 	}
 
@@ -2335,10 +2347,11 @@ class TaxJarSetup {
 	//
 	// The thumbnail is detached, not removed, so _stop_setup_video can put it
 	// back with its click handler still bound.
-	_play_setup_video_in_row() {
-		const $video = this.$body.find(".ts-video").addClass("is-playing");
+	_play_setup_video_in_row($video) {
+		$video.addClass("is-playing");
 		const $play = $video.find(".ts-video-play");
-		const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(SETUP_VIDEO_ID)}?autoplay=1&rel=0`;
+		const video_id = String($video.data("video-id"));
+		const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video_id)}?autoplay=1&rel=0`;
 		$play.after(`
 			<div class="ts-video-frame">
 				<iframe

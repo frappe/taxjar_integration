@@ -16450,10 +16450,10 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 
 	def test_the_walkthrough_stays_a_click_to_play_thumbnail(self):
 		"""Nothing loads from youtube.com for someone who never presses play."""
-		card = self._fn("_video_card({ title, description }) {")
-		self.assertIn("SETUP_VIDEO_POSTER", card)
+		card = self._fn("_video_card({ video_id, title, description }) {")
+		self.assertIn("video_poster(video_id)", card)
 		self.assertNotIn("youtube-nocookie.com", card)
-		self.assertIn("youtube-nocookie.com", self._fn("_play_setup_video_in_row() {"))
+		self.assertIn("youtube-nocookie.com", self._fn("_play_setup_video_in_row($video) {"))
 		# No duration in either label: the video can be re-cut without a line
 		# going quietly wrong, and a wrong duration is worse than none.
 		js = self._js()
@@ -16464,11 +16464,11 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 	def test_both_places_play_the_walkthrough_in_the_row(self):
 		"""The first step and the activated screen play the video the same way:
 		the row becomes the player. No dialog is left in the code."""
-		play = self._fn("_play_setup_video_in_row() {")
+		play = self._fn("_play_setup_video_in_row($video) {")
 		self.assertIn('addClass("is-playing")', play)
 		self.assertIn(".taxjar-setup .ts-video.is-playing {", self._setup_css())
 		binder = self._fn("_bind_setup_video() {")
-		self.assertIn("this._play_setup_video_in_row()", binder)
+		self.assertIn('page._play_setup_video_in_row($(this).closest(".ts-video"));', binder)
 		self.assertIn("this._bind_setup_video();", self._fn("_render_welcome() {"))
 		self.assertNotIn("_play_setup_video_in_dialog", self._js())
 		self.assertNotIn("ts-video-dialog", self._setup_css())
@@ -16484,7 +16484,7 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 		self.assertIn('$video.find(".ts-video-frame").replaceWith($video.data("ts-play"));', stop)
 		self.assertIn('$video.removeClass("is-playing");', stop)
 		# Detached, not removed, so the thumbnail keeps its click handler.
-		self.assertIn('$video.data("ts-play", $play.detach());', self._fn("_play_setup_video_in_row() {"))
+		self.assertIn('$video.data("ts-play", $play.detach());', self._fn("_play_setup_video_in_row($video) {"))
 
 	def test_the_walkthrough_opens_the_first_step_and_the_activated_screen(self):
 		"""One card, drawn by one method, in the two places a reader meets this
@@ -16493,16 +16493,18 @@ class TestGuidedSetupEditFlowJS(UnitTestCase):
 		days, with two things to be told."""
 		welcome = self._fn("_render_welcome() {")
 		self.assertIn("this._video_card({", welcome)
+		self.assertIn("video_id: SETUP_VIDEO_ID,", welcome)
 		self.assertIn('title: __("Setup TaxJar"),', welcome)
 
 		header = self._fn("_done_header() {")
 		self.assertIn("this._video_card({", header)
+		self.assertIn("video_id: WALKTHROUGH_VIDEO_ID,", header)
 		self.assertIn('title: __("Walkthrough"),', header)
 
 		# An id nobody has published yet would otherwise ship a play button that
 		# opens nothing, on the very first screen of the wizard.
-		card = self._fn("_video_card({ title, description }) {")
-		self.assertIn("if (!SETUP_VIDEO_ID) return \"\";", card)
+		card = self._fn("_video_card({ video_id, title, description }) {")
+		self.assertIn("if (!video_id) return \"\";", card)
 
 	def test_remedial_links_name_the_card_they_want_opened(self):
 		"""Both links appear only because a company has a feature flag off, and
