@@ -1,4 +1,5 @@
-// TaxJar — State Code and Region Code in the address quick entries.
+// TaxJar — State Code, Region Code and a preselected country in the address
+// quick entries.
 //
 // Two dialogs make an Address without the Address form: "New Address" on a
 // form's Address & Contact tab (frappe's AddressQuickEntryForm), and the
@@ -79,12 +80,55 @@ function prepare(d, country_field) {
 	d.__taxjar_region_fallback = "";
 }
 
+// The country from System Settings goes into an empty country box. Most
+// addresses a company enters are in its own country. A country that the
+// document already holds, as from a Lead, stays.
+function preselect_country(d, country_field) {
+	const country = frappe.defaults.get_default("country");
+	if (!country || !d.fields_dict[country_field] || d.get_value(country_field)) return;
+	return d.set_value(country_field, country);
+}
+
+// The address part of the Customer and Supplier quick entries, changed for
+// the preselected country.
+//
+// ERPNext makes Address Line 1 and City required when the country has a
+// value. With a preselected country, every new Customer and Supplier then
+// needs an address. Here the address is required only when the reader types
+// Address Line 1 or City. The State Code follows the same rule.
+//
+// ERPNext puts Country under State in the right column. In the Customer quick
+// entry, the State Code box also goes under State, so Country moves to the
+// left column, after ZIP Code. The Supplier quick entry has no State Code box,
+// and its columns stay as ERPNext makes them.
+function party_address_fields(fields) {
+	const started = "(doc.address_line1 || doc.city)";
+	for (const df of fields) {
+		if (df.fieldname === "address_line1") df.mandatory_depends_on = "eval:doc.city";
+		if (df.fieldname === "city") df.mandatory_depends_on = "eval:doc.address_line1";
+		if (df.fieldname === "taxjar_state_code") {
+			df.mandatory_depends_on = `eval:doc.country_address === "United States" && ${started}`;
+		}
+	}
+
+	if (!fields.some((df) => df.fieldname === "taxjar_state_code")) return fields;
+
+	const line1 = fields.findIndex((df) => df.fieldname === "address_line1");
+	const column = fields.findIndex((df, i) => i > line1 && df.fieldtype === "Column Break");
+	const country = fields.findIndex((df) => df.fieldname === "country_address");
+	if (line1 >= 0 && column > line1 && country > column) {
+		fields.splice(column, 0, ...fields.splice(country, 1));
+	}
+	return fields;
+}
+
 function with_address_codes(Base) {
 	return class extends Base {
 		render_dialog() {
 			prepare(this, "country");
 			this.docfields = with_code_fields(this.docfields, this, "country");
 			super.render_dialog();
+			preselect_country(this, "country");
 			taxjar_integration._refresh_dialog_codes(this);
 		}
 	};
@@ -97,12 +141,29 @@ function with_customer_codes(Base) {
 	return class extends Base {
 		get_variant_fields() {
 			prepare(this, "country_address");
-			return with_code_fields(super.get_variant_fields(), this, "country_address");
+			const fields = with_code_fields(super.get_variant_fields(), this, "country_address");
+			return party_address_fields(fields);
 		}
 
 		render_dialog() {
 			super.render_dialog();
+			preselect_country(this, "country_address");
 			taxjar_integration._refresh_dialog_codes(this);
+		}
+	};
+}
+
+// The Supplier quick entry is the same ERPNext class under a second name. It
+// gets the country only: TaxJar reads no supplier address.
+function with_supplier_country(Base) {
+	return class extends Base {
+		get_variant_fields() {
+			return party_address_fields(super.get_variant_fields());
+		}
+
+		render_dialog() {
+			super.render_dialog();
+			preselect_country(this, "country_address");
 		}
 	};
 }
@@ -110,6 +171,7 @@ function with_customer_codes(Base) {
 const WRAPPERS = {
 	AddressQuickEntryForm: with_address_codes,
 	CustomerQuickEntryForm: with_customer_codes,
+	SupplierQuickEntryForm: with_supplier_country,
 };
 
 // Each class is wrapped the first time a quick entry opens, not when this
