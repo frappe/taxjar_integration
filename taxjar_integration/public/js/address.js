@@ -18,26 +18,26 @@ function _has_region_code_field(frm) {
 	return !!frm.fields_dict["taxjar_region_code"];
 }
 
-// The sentence under the Region Code box, and nothing where there is nothing to
-// say: a code the state produced needs no sentence to explain it.
-//
-// The field's own description is kept either way. It says what the box is for,
-// which is a different question from whether this state answered it.
-//
-// The sentence here does not name the stand-in, the way the save-time dialog's
-// does. The dialog writes "XX" into the box and this form leaves it empty, and
-// a form that promised a default it does not write would be wrong.
-function _describe_region_code(frm, code) {
-	const field = frm.fields_dict["taxjar_region_code"];
-	if (!field) return;
-	if (frm.__taxjar_region_description === undefined) {
-		frm.__taxjar_region_description = field.df.description || "";
-	}
-	const origin = code ? "" : __("Cannot find region code.");
+// The sentences under the two code boxes, the same ones the address dialogs
+// show - see _region_code_hint() and _state_code_hint() in taxjar_utils.js.
+function _describe_region_code(frm) {
+	if (!_has_region_code_field(frm)) return;
 	frm.set_df_property(
 		"taxjar_region_code",
 		"description",
-		`${frm.__taxjar_region_description} ${origin}`.trim()
+		taxjar_integration._region_code_hint(
+			(frm.doc.taxjar_region_code || "").trim() === taxjar_integration.UNKNOWN_REGION_CODE,
+			!!(frm.doc.state || "").trim()
+		)
+	);
+}
+
+function _describe_state_code(frm) {
+	if (!_has_state_code_field(frm)) return;
+	frm.set_df_property(
+		"taxjar_state_code",
+		"description",
+		taxjar_integration._state_code_hint(frm.doc.state)
 	);
 }
 
@@ -64,11 +64,12 @@ function _refresh_region_code(frm) {
 	}
 
 	// Only what this script wrote is replaced. A code already in the box is the
-	// reader's own answer - the "XX" stand-in they accepted in the save-time
-	// dialog included - and an edit to the state does not make it ours to
-	// overwrite.
+	// reader's own answer, and an edit to the state does not make it ours to
+	// overwrite. The "XX" stand-in is never an answer, and a real region beats
+	// it.
+	const unknown = taxjar_integration.UNKNOWN_REGION_CODE;
 	const stored = (frm.doc.taxjar_region_code || "").trim();
-	if (stored && stored !== frm.__taxjar_region_code) return;
+	if (stored && stored !== frm.__taxjar_region_code && stored !== unknown) return;
 
 	// Nothing to work out without a region name, and nothing to say about it
 	// either. A reader picks the country first and types the state after it,
@@ -76,7 +77,7 @@ function _refresh_region_code(frm) {
 	if (!(frm.doc.state || "").trim()) {
 		if (stored) frm.set_value("taxjar_region_code", "");
 		frm.__taxjar_region_code = "";
-		return;
+		return _describe_region_code(frm);
 	}
 
 	return frappe
@@ -89,10 +90,12 @@ function _refresh_region_code(frm) {
 			// A code the reader typed while the lookup ran is their answer.
 			if ((frm.doc.taxjar_region_code || "").trim() !== stored) return;
 
-			const code = (answer && answer.region_code) || "";
+			// A State with no matching region gets the stand-in, as in the
+			// save-time dialog. TaxJar refuses a blank region and takes "XX".
+			const code = (answer && answer.region_code) || unknown;
 			frm.__taxjar_region_code = code;
-			if (code !== stored) frm.set_value("taxjar_region_code", code);
-			_describe_region_code(frm, code);
+			const write = code !== stored ? frm.set_value("taxjar_region_code", code) : null;
+			return Promise.resolve(write).then(() => _describe_region_code(frm));
 		});
 }
 
@@ -129,6 +132,8 @@ frappe.ui.form.on("Address", {
 
 	refresh(frm) {
 		_set_taxjar_mandatory_fields(frm);
+		_describe_state_code(frm);
+		_describe_region_code(frm);
 	},
 
 	country(frm) {
@@ -148,6 +153,7 @@ frappe.ui.form.on("Address", {
 	state(frm) {
 		if (frm.doc.country !== "United States") return _refresh_region_code(frm);
 		if (!_has_state_code_field(frm)) return;
+		_describe_state_code(frm);
 		const code = taxjar_integration.us_state_code_from_name(frm.doc.state);
 		if (code && code !== frm.doc.taxjar_state_code) {
 			frm.set_value("taxjar_state_code", code);

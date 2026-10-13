@@ -14,6 +14,10 @@
 // The two boxes, the same pair under the same rule as the Create Address
 // dialog in taxjar_utils.js: the state code for a United States address, the
 // region code for every other one.
+//
+// Each box starts with the sentence for an empty State. Without it, a box
+// shows the field's own description until the first change to State or
+// Country.
 function code_fields(d, country_field) {
 	const is_us = `eval:doc.${country_field} === "United States"`;
 	return [
@@ -21,6 +25,7 @@ function code_fields(d, country_field) {
 			fieldtype: "Select",
 			fieldname: "taxjar_state_code",
 			label: __("State Code (US)"),
+			description: taxjar_integration._state_code_hint(""),
 			options: taxjar_integration.us_state_code_options(),
 			depends_on: is_us,
 			mandatory_depends_on: is_us,
@@ -30,6 +35,7 @@ function code_fields(d, country_field) {
 			fieldtype: "Data",
 			fieldname: "taxjar_region_code",
 			label: __("Region Code (ISO 3166-2)"),
+			description: taxjar_integration._region_code_hint(false, false),
 			depends_on: `eval:doc.${country_field} && doc.${country_field} !== "United States"`,
 		},
 	];
@@ -73,11 +79,11 @@ function bind_to_doc(d, df) {
 }
 
 // What each dialog shares once it is on the screen. The country names the
-// box, and an empty region box matches the Address form - see
-// _refresh_dialog_region().
+// box, and an empty State leaves the region box empty, as on the Address
+// form - see _refresh_dialog_region().
 function prepare(d, country_field) {
 	d.__taxjar_country_field = country_field;
-	d.__taxjar_region_fallback = "";
+	d.__taxjar_no_state_code = "";
 }
 
 // The country from System Settings goes into an empty country box. Most
