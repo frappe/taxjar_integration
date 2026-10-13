@@ -73,29 +73,33 @@ describe("the Address form", () => {
 		expect(frm.doc.taxjar_region_code).toBe("BY");
 	});
 
-	it("says nothing under the box when the state produced a code", async () => {
-		// The code is in the box. A sentence saying so explains nothing the
-		// reader cannot already see.
+	it("says the code comes from the state when the state produced a code", async () => {
 		answer_xcall(frappe, { [REGION_METHOD]: { region_code: "GJ" } });
 
 		const frm = open_address({ state: "Gujarat" });
 		await address.state(frm);
 
-		expect(region_hint(frm)).toBe("");
+		expect(region_hint(frm)).toBe("Auto-filled based on State/Province.");
 	});
 
-	it("says under the box when no region matched", async () => {
+	it("writes the stand-in and says so when no region matched", async () => {
 		// Singapore has no ISO region to match. The reader is told so here
-		// rather than by a dialog on the next invoice.
+		// rather than by a dialog on the next invoice, and the box holds the
+		// stand-in that TaxJar takes.
 		answer_xcall(frappe, { [REGION_METHOD]: { region_code: "" } });
 
 		const frm = open_address({ country: "Singapore", state: "Singapore" });
 		await address.state(frm);
 
-		// The box was empty and stays empty, so nothing is written to it - an
-		// Address the reader only opened does not become an Address to save.
-		expect(frm.set_value).not.toHaveBeenCalled();
-		expect(region_hint(frm)).toBe("Cannot find region code.");
+		expect(frm.doc.taxjar_region_code).toBe("XX");
+		expect(region_hint(frm)).toBe("Cannot find region code, using fallback code.");
+	});
+
+	it("says the code comes from the state while the state box is empty", async () => {
+		const frm = open_address({ country: "Germany", state: "" });
+		await address.country(frm);
+
+		expect(region_hint(frm)).toBe("Auto-filled based on State/Province.");
 	});
 
 	it("replaces its own answer when the state changes again", async () => {
@@ -111,15 +115,24 @@ describe("the Address form", () => {
 	});
 
 	it("leaves a code the reader typed alone", async () => {
-		// The stand-in accepted in the save-time dialog arrives this way too.
-		// Overwriting it would ask the reader again for an answer they gave.
+		answer_xcall(frappe, { [REGION_METHOD]: { region_code: "GJ" } });
+
+		const frm = open_address({ state: "Gujarat", taxjar_region_code: "DL" });
+		await address.state(frm);
+
+		expect(frm.doc.taxjar_region_code).toBe("DL");
+		expect(frappe.xcall).not.toHaveBeenCalled();
+	});
+
+	it("replaces a saved stand-in once the state names a region", async () => {
+		// The stand-in is never the reader's answer. A real region beats it,
+		// and a state with no match writes the stand-in again.
 		answer_xcall(frappe, { [REGION_METHOD]: { region_code: "GJ" } });
 
 		const frm = open_address({ state: "Gujarat", taxjar_region_code: "XX" });
 		await address.state(frm);
 
-		expect(frm.doc.taxjar_region_code).toBe("XX");
-		expect(frappe.xcall).not.toHaveBeenCalled();
+		expect(frm.doc.taxjar_region_code).toBe("GJ");
 	});
 
 	it("asks nothing for a United States address, and clears a code left behind", async () => {
@@ -158,6 +171,28 @@ describe("the Address form", () => {
 	});
 });
 
+describe("the State Code on the Address form", () => {
+	/** The sentence the form put under the State Code box. */
+	function state_hint(frm) {
+		return frm.fields_dict["taxjar_state_code"].df.description || "";
+	}
+
+	it("says the code comes from the state when the state names one", async () => {
+		const frm = open_address({ country: "United States", state: "Texas" });
+		await address.state(frm);
+
+		expect(frm.doc.taxjar_state_code).toBe("TX");
+		expect(state_hint(frm)).toBe("Auto-filled based on State/Province.");
+	});
+
+	it("asks for the code from the dropdown when the state names none", async () => {
+		const frm = open_address({ country: "United States", state: "Nowhere" });
+		await address.state(frm);
+
+		expect(state_hint(frm)).toBe("Cannot find state code, please select from dropdown.");
+	});
+});
+
 describe("the save-time dialog", () => {
 	/** Open the dialog on one address row, and hand back the dialog. */
 	function open_dialog(row = {}, missing = []) {
@@ -191,7 +226,7 @@ describe("the save-time dialog", () => {
 		await flush();
 
 		expect(d.get_value("taxjar_region_code")).toBe("GJ");
-		expect(hint(d)).toBe("");
+		expect(hint(d)).toBe("Auto-filled based on State/Province.");
 	});
 
 	it("keeps the stand-in when the new state names no region", async () => {
