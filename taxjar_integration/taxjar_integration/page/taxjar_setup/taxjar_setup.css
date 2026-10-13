@@ -514,20 +514,28 @@
 	border: 1px solid var(--border-color); border-radius: var(--radius-lg, 12px);
 }
 .taxjar-setup .ts-video-play {
-	flex: none; position: relative; overflow: hidden; padding: 0; cursor: pointer;
+	flex: none; position: relative; overflow: hidden; padding: 1px; cursor: pointer;
 	width: 168px; height: 96px;
-	display: flex; align-items: center; justify-content: center;
+	/* The play mark sits in the bottom right corner, so it covers less of the
+	   title that the thumbnail shows. */
+	display: flex; align-items: flex-end; justify-content: flex-end;
 	/* Fixed dark, not a theme surface: it stands in for a video frame, and it
 	   shows only while the thumbnail is in flight or if i.ytimg.com is
 	   unreachable. A light gap there reads as broken. */
 	background: #0f0f0f;
-	border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px);
+	/* The dark background stops 1px inside the edge, and the thumbnail covers
+	   that 1px. At a rounded corner, the edge of the image is partly
+	   transparent. A background under it showed as a dark ring there. */
+	background-clip: content-box;
+	/* One step darker than the card border. The thumbnail is light gray, and
+	   var(--border-color) is almost the same color, so that edge disappeared. */
+	border: 1px solid var(--outline-gray-2); border-radius: var(--radius-md, 8px);
 }
 /* 16:9 cropped to fill, so hqdefault's baked-in letterbox bars fall outside
    the frame when maxresdefault is missing and the fallback loads. */
 .taxjar-setup .ts-video-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .taxjar-setup .ts-video-mark {
-	position: relative; width: 34px; height: 34px; border-radius: 50%;
+	position: relative; width: 34px; height: 34px; border-radius: 50%; margin: 8px;
 	display: inline-flex; align-items: center; justify-content: center;
 	background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(2px);
 }
@@ -544,7 +552,7 @@
 .taxjar-setup .ts-video.is-playing .ts-video-text { display: none; }
 .taxjar-setup .ts-video-frame {
 	width: 100%; max-width: 720px; margin: 0 auto; aspect-ratio: 16 / 9;
-	border: 1px solid var(--border-color); border-radius: var(--radius-md, 8px); overflow: hidden;
+	border: 1px solid var(--outline-gray-2); border-radius: var(--radius-md, 8px); overflow: hidden;
 }
 .taxjar-setup .ts-video-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
 
