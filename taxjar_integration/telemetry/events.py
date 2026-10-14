@@ -59,7 +59,12 @@ CONNECTION_RESULTS = ("ok", "no_token", "invalid_token", "rejected", "unreachabl
 ADDRESS_RESULTS = ("valid", "not_found", "unsupported_country", "unreachable", "error", "no_credential")
 FAILURE_KINDS = ("connection", "response", "unexpected")
 HTTP_STATUSES = tuple(range(400, 600))
-BLOCK_REASONS = ("destination_required", "return_reference_missing", "exchange_rate_missing")
+BLOCK_REASONS = (
+	"destination_required",
+	"return_reference_missing",
+	"return_original_not_synced",
+	"exchange_rate_missing",
+)
 ADDRESS_SIDES = ("origin", "destination")
 SOURCES = ("form", "bulk")
 EXPORT_PAGES = ("transactions", "customers")

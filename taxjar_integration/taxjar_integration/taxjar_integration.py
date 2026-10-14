@@ -1854,6 +1854,38 @@ def validate_return_against(doc, method):
 		)
 
 
+def validate_return_original_synced(doc, method):
+	"""Refuse to submit a credit note whose original invoice TaxJar does not hold.
+
+	The credit note dialog checks this when the reader picks the invoice, but
+	ERPNext's own Create > Return / Credit Note button on the invoice skips that
+	dialog. This is the check for every route.
+
+	At submit, not at save: the refund goes to TaxJar on submit, and an invoice
+	that is still Queued when the draft is made can be Synced by then.
+	"""
+	if not getattr(doc, "is_return", False) or not doc.return_against:
+		return
+	scope = company_scope(doc.company)
+	if not scope.files:
+		return
+	# An export the company keeps out of TaxJar is never sent, so its credit
+	# note has nothing to file against either.
+	if _export_is_excluded(doc, scope):
+		return
+	if frappe.db.get_value("Sales Invoice", doc.return_against, "taxjar_sync_status") == "Synced":
+		return
+
+	capture("taxjar_document_blocked", reason="return_original_not_synced")
+	frappe.throw(
+		_(
+			"Original sales invoice {0} isn't synced to TaxJar, so this credit note can't be "
+			"submitted against it. Sync {0} to TaxJar first, then submit this credit note."
+		).format(frappe.bold(doc.return_against)),
+		title=_("Original Invoice Not Synced"),
+	)
+
+
 def strip_foreign_company_tax_rows(doc, method=None):
 	"""before_validate: drop any Sales/Purchase Taxes and Charges row whose
 	ledger belongs to a different company than this document.

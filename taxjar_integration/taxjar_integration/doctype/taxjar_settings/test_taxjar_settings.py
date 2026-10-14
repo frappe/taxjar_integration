@@ -8603,6 +8603,62 @@ class TestValidateReturnAgainst(UnitTestCase):
 		self.assertNotIn("\n", message)
 
 
+class TestValidateReturnOriginalSynced(UnitTestCase):
+	"""The credit note dialog refuses an unsynced original, but ERPNext's own
+	Create > Return button on the invoice skips that dialog. The submit hook is
+	the check for every route."""
+
+	MOD = "taxjar_integration.taxjar_integration.taxjar_integration"
+
+	def _return_doc(self, return_against="SINV-ORIG-001"):
+		doc = _make_doc()
+		doc.is_return = True
+		doc.return_against = return_against
+		return doc
+
+	def _run(self, doc, original_status, files=True, export_excluded=False):
+		from taxjar_integration.taxjar_integration.taxjar_integration import (
+			validate_return_original_synced,
+		)
+
+		with patch(f"{self.MOD}.company_scope", return_value=_files_scope(files)), \
+		     patch(f"{self.MOD}._export_is_excluded", return_value=export_excluded), \
+		     patch(f"{self.MOD}.frappe.db.get_value", side_effect=_scalar_get_value(original_status)):
+			validate_return_original_synced(doc, None)
+
+	def test_passes_when_the_original_is_synced(self):
+		self._run(self._return_doc(), "Synced")
+
+	def test_refuses_each_status_that_is_not_synced(self):
+		for status in ("Queued", "Failed", "Excluded", None):
+			with self.subTest(status=status):
+				with self.assertRaises(frappe.ValidationError):
+					self._run(self._return_doc(), status)
+				self.assertIn("SINV-ORIG-001", _thrown_html())
+
+	def test_skips_a_document_that_is_not_a_return(self):
+		doc = self._return_doc()
+		doc.is_return = False
+		self._run(doc, "Failed")
+
+	def test_skips_a_return_with_no_reference(self):
+		# validate_return_against owns that refusal, at save.
+		self._run(self._return_doc(return_against=None), "Failed")
+
+	def test_skips_when_the_company_does_not_file(self):
+		self._run(self._return_doc(), "Failed", files=False)
+
+	def test_skips_an_export_the_company_keeps_out_of_taxjar(self):
+		self._run(self._return_doc(), "Excluded", export_excluded=True)
+
+	def test_runs_at_submit_not_at_save(self):
+		from taxjar_integration import hooks
+
+		handlers = hooks.doc_events["Sales Invoice"]
+		self.assertIn(f"{self.MOD}.validate_return_original_synced", handlers["before_submit"])
+		self.assertNotIn(f"{self.MOD}.validate_return_original_synced", handlers["validate"])
+
+
 class TestStripForeignCompanyTaxRows(UnitTestCase):
 	"""erpnext's own client script can leave a tax row from a previously
 	selected company sitting on the document after a company switch, since
@@ -20245,6 +20301,44 @@ class TestExportsAreExcludedNotFailed(TaxJarTestCase):
 		self.assertEqual(written["taxjar_sync_status"], "Excluded")
 		self.assertEqual(written["taxjar_exclusion_reason"], module.EXCLUSION_OUTSIDE_COVERAGE)
 		enqueue.assert_not_called()
+
+	def test_an_export_credit_note_submits_but_is_never_filed(self):
+		"""The credit note of an excluded export may be submitted, so the sale
+		can be refunded in ERPNext. It is excluded like its invoice, and the
+		refund never reaches TaxJar."""
+		from taxjar_integration.taxjar_integration import taxjar_integration as module
+
+		doc = self._doc(company=US_FILE_NO_EXPORTS.name)
+		doc.is_return = True
+		doc.return_against = "SINV-EXPORT-001"
+		with self.scope_patches(), \
+		     patch.object(module, "is_export_destination", return_value=True), \
+		     patch.object(module, "get_client", return_value=MagicMock()) as get_client, \
+		     patch.object(module, "_publish_transaction_update"), \
+		     patch.object(module.frappe, "enqueue") as enqueue, \
+		     patch.object(module.frappe.db, "get_value", side_effect=_scalar_get_value("Excluded")):
+			module.validate_return_original_synced(doc, None)
+			module.enqueue_taxjar_sync(doc, None)
+
+		written = doc.db_set.call_args[0][0]
+		self.assertEqual(written["taxjar_sync_status"], "Excluded")
+		self.assertEqual(written["taxjar_exclusion_reason"], module.EXCLUSION_OUTSIDE_COVERAGE)
+		enqueue.assert_not_called()
+		get_client.return_value.create_refund.assert_not_called()
+
+	def test_an_export_credit_note_is_refused_once_exports_are_filed(self):
+		"""Exports are filed now, but the invoice was kept out. The refund would
+		be filed against a transaction TaxJar never received."""
+		from taxjar_integration.taxjar_integration import taxjar_integration as module
+
+		doc = self._doc(company=US_FILE.name)
+		doc.is_return = True
+		doc.return_against = "SINV-EXPORT-001"
+		with self.scope_patches(), \
+		     patch.object(module, "is_export_destination", return_value=True), \
+		     patch.object(module.frappe.db, "get_value", side_effect=_scalar_get_value("Excluded")):
+			with self.assertRaises(frappe.ValidationError):
+				module.validate_return_original_synced(doc, None)
 
 	def test_submitting_an_export_queues_it_when_the_company_includes_exports(self):
 		"""The other side of the same switch. The country is identical; only

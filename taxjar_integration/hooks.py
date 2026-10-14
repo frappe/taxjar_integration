@@ -162,7 +162,10 @@ doc_events = {
 			"taxjar_integration.taxjar_integration.taxjar_integration.set_transaction_nature",
 		],
 		# At submit, not at save: an incomplete draft is unfinished, not wrong.
-		"before_submit": "taxjar_integration.taxjar_integration.taxjar_integration.validate_taxable_destination",
+		"before_submit": [
+			"taxjar_integration.taxjar_integration.taxjar_integration.validate_taxable_destination",
+			"taxjar_integration.taxjar_integration.taxjar_integration.validate_return_original_synced",
+		],
 		"on_submit": "taxjar_integration.taxjar_integration.taxjar_integration.enqueue_taxjar_sync",
 		"on_cancel": "taxjar_integration.taxjar_integration.taxjar_integration.enqueue_taxjar_delete",
 	},

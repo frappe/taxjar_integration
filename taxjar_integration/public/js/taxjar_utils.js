@@ -1504,16 +1504,18 @@ taxjar_integration.show_return_reference_dialog = function (frm) {
 			//
 			// Returning the promise lets the dialog disable its button while
 			// the read runs, the same way the address picker does.
-			return taxjar_integration.invoice_is_synced(invoice_name).then((synced) => {
-				if (!synced) {
-					taxjar_integration.show_invoice_not_synced_message();
-					return;
-				}
+			return taxjar_integration
+				.invoice_can_be_reversed(invoice_name, frm.doc.company)
+				.then((reversible) => {
+					if (!reversible) {
+						taxjar_integration.show_invoice_not_synced_message();
+						return;
+					}
 
-				chosen = true;
-				d.hide();
-				return taxjar_integration.open_return_credit_note(frm, invoice_name);
-			});
+					chosen = true;
+					d.hide();
+					return taxjar_integration.open_return_credit_note(frm, invoice_name);
+				});
 		},
 		secondary_action_label: __("Cancel"),
 		secondary_action() {
@@ -1655,16 +1657,31 @@ taxjar_integration.render_return_invoice_preview = function (d) {
 		});
 };
 
-// Synced, and nothing else. TaxJar files the refund against a transaction it
-// already holds, so it has nothing to file against an invoice it never
-// received - Queued, Failed and Excluded all leave it with nothing.
-taxjar_integration.invoice_is_synced = function (invoice_name) {
-	return frappe.db
-		.get_value("Sales Invoice", invoice_name, "taxjar_sync_status")
-		.then((result) => {
-			const row = (result && result.message) || {};
-			return row.taxjar_sync_status === "Synced";
-		});
+// TaxJar files the refund against a transaction it already holds, so it has
+// nothing to file against an invoice it never received - Queued, Failed and
+// Excluded all leave it with nothing.
+//
+// One exception: an export the company keeps out of TaxJar. Its credit note is
+// an export too, so it is excluded in the same way and never sent. The company
+// must still keep exports out now, or the credit note would be filed against
+// nothing. validate_return_original_synced applies the same rule at submit.
+taxjar_integration.invoice_can_be_reversed = function (invoice_name, company) {
+	return Promise.all([
+		frappe.db.get_value("Sales Invoice", invoice_name, [
+			"taxjar_sync_status",
+			"taxjar_exclusion_reason",
+		]),
+		taxjar_integration.scope(company),
+	]).then(([result, scope]) => {
+		const row = (result && result.message) || {};
+		if (row.taxjar_sync_status === "Synced") return true;
+		return (
+			row.taxjar_sync_status === "Excluded" &&
+			row.taxjar_exclusion_reason === "Export Transaction" &&
+			Boolean(scope) &&
+			!scope.files_exports
+		);
+	});
 };
 
 // The picker stays open behind this, so the reader picks another invoice

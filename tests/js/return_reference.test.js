@@ -642,10 +642,56 @@ describe("an invoice TaxJar never received", () => {
 		await continue_on("Synced");
 
 		const reads = frappe.db.get_value.mock.calls.filter(
-			(call) => call[2] === "taxjar_sync_status"
+			(call) => Array.isArray(call[2]) && call[2].includes("taxjar_exclusion_reason")
 		);
 		expect(reads).toHaveLength(1);
 		expect(frappe.model.open_mapped_doc).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("an export the company keeps out of TaxJar", () => {
+	async function continue_on(values, profile = US_FILE) {
+		answer_scope(frappe, profile);
+		answer_invoice_reads(1, values);
+
+		const frm = open_credit_note(profile);
+		await tick_is_return(frm);
+		dialogs[0].set_value("return_against", "ACC-SINV-2026-00318");
+		await dialogs[0].options.primary_action();
+
+		return frm;
+	}
+
+	const EXCLUDED_EXPORT = {
+		taxjar_sync_status: "Excluded",
+		taxjar_exclusion_reason: "Export Transaction",
+	};
+
+	// The credit note is an export too, so it is excluded and never sent.
+	// Refusing it would leave no way to refund an export sale.
+	it("opens the credit note", async () => {
+		await continue_on(EXCLUDED_EXPORT);
+
+		expect(frappe.msgprint).not.toHaveBeenCalled();
+		expect(frappe.model.open_mapped_doc).toHaveBeenCalledTimes(1);
+	});
+
+	// Exports are filed now, so the credit note would go to TaxJar against an
+	// invoice TaxJar never received.
+	it("refuses once the company files its exports", async () => {
+		await continue_on(EXCLUDED_EXPORT, { ...US_FILE, files_exports: true });
+
+		expect(frappe.model.open_mapped_doc).not.toHaveBeenCalled();
+		expect(frappe.msgprint.mock.calls[0][0].title).toBe("Original Invoice Not Synced");
+	});
+
+	it("refuses an invoice excluded for any other reason", async () => {
+		await continue_on({
+			taxjar_sync_status: "Excluded",
+			taxjar_exclusion_reason: "Transaction Sync not enabled for company",
+		});
+
+		expect(frappe.model.open_mapped_doc).not.toHaveBeenCalled();
 	});
 });
 
