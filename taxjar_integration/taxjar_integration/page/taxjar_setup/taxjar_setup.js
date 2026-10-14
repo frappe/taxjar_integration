@@ -52,10 +52,10 @@ const AUTOFILE_DOC_URL = "https://support.taxjar.com/article/908-how-does-autofi
 // button that opens nothing.
 //
 // SETUP_VIDEO_ID is the setup walkthrough on the first wizard screen.
-// WALKTHROUGH_VIDEO_ID is the video on the "TaxJar is configured" screen. It is
-// a temporary link; replace the id when that video is published.
+// WALKTHROUGH_VIDEO_ID is the features walkthrough on the "TaxJar is configured"
+// screen.
 const SETUP_VIDEO_ID = "2RnyQMNnjME";
-const WALKTHROUGH_VIDEO_ID = "qSP820YuqX4";
+const WALKTHROUGH_VIDEO_ID = "Y-ppuE5RsLg";
 
 // The video's own thumbnail host. maxresdefault only exists for videos uploaded
 // above 720p, so it 404s on plenty of them; hqdefault is generated for every
