@@ -12,6 +12,7 @@ from taxjar_integration.taxjar_integration.taxjar_integration import (
 	classify_taxjar_error,
 	company_scope,
 	get_catalogue_client,
+	get_client,
 	recover_stuck_customer_syncs,
 )
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
@@ -155,6 +156,30 @@ def sync_product_tax_categories():
 		frappe.log_error(frappe.get_traceback(), "TaxJar: Product tax category sync failed")
 
 
+# Applied to the jobs a run sends, not to the rows it reads. A row skipped for a
+# missing credential must not take one of the places, or 50 such rows would keep
+# every other row out of the cron for good.
+_RETRIES_PER_TICK = 50
+
+
+def _companies_with_credential():
+	"""A check for "this company has a credential", asked once per company per run.
+
+	The retry crons skip a company with no credential. The job would only fail
+	again and add one to the retry count, so after TAXJAR_MAX_SYNC_RETRIES runs
+	the record would drop out of the cron. Skipped, it stays in, and the first
+	run after an admin adds the credential sends it.
+	"""
+	cache = {}
+
+	def has_credential(company):
+		if company not in cache:
+			cache[company] = bool(get_client(company))
+		return cache[company]
+
+	return has_credential
+
+
 def retry_failed_taxjar_syncs():
 	"""Every 15 min: re-enqueue Failed Sales Invoices for companies that still have
 	transaction filing enabled.
@@ -184,12 +209,17 @@ def retry_failed_taxjar_syncs():
 			"docstatus": ("in", (1, 2)),
 		},
 		fields=["name", "company"],
-		limit=50,
+		limit_page_length=0,
 	)
 
+	has_credential = _companies_with_credential()
+	sent = 0
 	for invoice in failed_invoices:
-		if not company_scope(invoice.company).files:
+		if sent >= _RETRIES_PER_TICK:
+			break
+		if not company_scope(invoice.company).files or not has_credential(invoice.company):
 			continue
+		sent += 1
 		frappe.enqueue(
 			"taxjar_integration.taxjar_integration.taxjar_integration.sync_transaction_to_taxjar",
 			invoice_name=invoice.name,
@@ -222,7 +252,7 @@ def retry_failed_taxjar_customer_syncs():
 			"taxjar_customer_sync_retry_count": ("<", TAXJAR_MAX_SYNC_RETRIES),
 		},
 		pluck="name",
-		limit=50,
+		limit_page_length=0,
 	)
 
 	# One shared definition of "a company a customer sync goes to". This loop
@@ -232,8 +262,15 @@ def retry_failed_taxjar_customer_syncs():
 	companies = _customer_sync_companies()
 	allowed = _allowed_companies_by_customer(failed_customers)
 
+	has_credential = _companies_with_credential()
+	sent = 0
 	for customer_name in failed_customers:
-		for company in _restrict_companies(companies, allowed[customer_name]):
+		if sent >= _RETRIES_PER_TICK:
+			break
+		ready = [c for c in _restrict_companies(companies, allowed[customer_name]) if has_credential(c)]
+		if ready:
+			sent += 1
+		for company in ready:
 			frappe.enqueue(
 				"taxjar_integration.taxjar_integration.taxjar_integration.sync_customer_to_taxjar",
 				customer_name=customer_name,

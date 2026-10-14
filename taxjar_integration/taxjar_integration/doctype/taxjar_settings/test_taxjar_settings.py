@@ -9180,6 +9180,7 @@ class TestRetryFailedTaxjarSyncs(UnitTestCase):
 		with patch("taxjar_integration.taxjar_integration.tasks._is_taxjar_enabled", return_value=True), \
 		     patch("taxjar_integration.taxjar_integration.tasks.company_scope", return_value=_files_scope(True)), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.get_all", return_value=invoices), \
+		     patch("taxjar_integration.taxjar_integration.tasks.get_client", return_value=MagicMock()), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.enqueue") as mock_enqueue:
 			retry_failed_taxjar_syncs()
 		self.assertEqual(mock_enqueue.call_count, 2)
@@ -9195,10 +9196,46 @@ class TestRetryFailedTaxjarSyncs(UnitTestCase):
 		     patch("taxjar_integration.taxjar_integration.tasks.company_scope",
 		           side_effect=lambda company: _files_scope(company == "Co A")), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.get_all", return_value=invoices), \
+		     patch("taxjar_integration.taxjar_integration.tasks.get_client", return_value=MagicMock()), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.enqueue") as mock_enqueue:
 			retry_failed_taxjar_syncs()
 		self.assertEqual(mock_enqueue.call_count, 1)
 		self.assertEqual(mock_enqueue.call_args[1]["invoice_name"], "SINV-001")
+
+	def _retry(self, invoices, has_client):
+		from taxjar_integration.taxjar_integration.tasks import retry_failed_taxjar_syncs
+		with patch("taxjar_integration.taxjar_integration.tasks._is_taxjar_enabled", return_value=True), \
+		     patch("taxjar_integration.taxjar_integration.tasks.company_scope", return_value=_files_scope(True)), \
+		     patch("taxjar_integration.taxjar_integration.tasks.frappe.get_all", return_value=invoices) as get_all, \
+		     patch("taxjar_integration.taxjar_integration.tasks.get_client",
+		           side_effect=lambda company: MagicMock() if has_client(company) else None) as get_client, \
+		     patch("taxjar_integration.taxjar_integration.tasks.frappe.enqueue") as mock_enqueue:
+			retry_failed_taxjar_syncs()
+		return mock_enqueue, get_all, get_client
+
+	def test_skips_invoices_for_companies_with_no_credential(self):
+		"""The job would fail again and add one to the retry count. Skipped,
+		the invoice stays in the cron until an admin adds the credential."""
+		invoices = [frappe._dict(name="SINV-001", company="Co A"), frappe._dict(name="SINV-002", company="Co B")]
+		mock_enqueue, _get_all, _get_client = self._retry(invoices, has_client=lambda c: c == "Co A")
+
+		self.assertEqual([c.kwargs["invoice_name"] for c in mock_enqueue.call_args_list], ["SINV-001"])
+
+	def test_asks_for_each_credential_once(self):
+		invoices = [frappe._dict(name=f"SINV-{i}", company="Co A") for i in range(3)]
+		_enqueue, _get_all, get_client = self._retry(invoices, has_client=lambda c: True)
+
+		get_client.assert_called_once_with("Co A")
+
+	def test_skipped_invoices_do_not_take_the_places_of_others(self):
+		"""With the limit on the query, 50 skipped rows kept every other row out."""
+		invoices = [frappe._dict(name=f"SINV-A{i}", company="Co A") for i in range(60)]
+		invoices += [frappe._dict(name=f"SINV-B{i}", company="Co B") for i in range(60)]
+		mock_enqueue, get_all, _get_client = self._retry(invoices, has_client=lambda c: c == "Co B")
+
+		self.assertEqual(get_all.call_args.kwargs["limit_page_length"], 0)
+		sent = [c.kwargs["invoice_name"] for c in mock_enqueue.call_args_list]
+		self.assertEqual(sent, [f"SINV-B{i}" for i in range(50)])
 
 	def test_hooks_registers_cron(self):
 		from taxjar_integration import hooks
@@ -10334,10 +10371,45 @@ class TestRetryFailedCustomerSyncs(UnitTestCase):
 		     patch("taxjar_integration.taxjar_integration.tasks._customer_sync_companies", return_value=["Test Co"]), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.get_all", return_value=["CUST-001", "CUST-002"]), \
 		     patch("taxjar_integration.taxjar_integration.tasks._allowed_companies_by_customer", side_effect=dict.fromkeys), \
+		     patch("taxjar_integration.taxjar_integration.tasks.get_client", return_value=MagicMock()), \
 		     patch("taxjar_integration.taxjar_integration.tasks.frappe.enqueue") as mock_enqueue:
 			retry_failed_taxjar_customer_syncs()
 
 		self.assertEqual(mock_enqueue.call_count, 2)
+
+	def _retry(self, customers, has_client, companies=("Test Co",)):
+		from taxjar_integration.taxjar_integration.tasks import retry_failed_taxjar_customer_syncs
+
+		with patch("taxjar_integration.taxjar_integration.tasks._is_taxjar_enabled", return_value=True), \
+		     patch("taxjar_integration.taxjar_integration.tasks.recover_stuck_customer_syncs", return_value=[]), \
+		     patch("taxjar_integration.taxjar_integration.tasks._customer_sync_companies", return_value=list(companies)), \
+		     patch("taxjar_integration.taxjar_integration.tasks.frappe.get_all", return_value=list(customers)) as get_all, \
+		     patch("taxjar_integration.taxjar_integration.tasks._allowed_companies_by_customer", side_effect=dict.fromkeys), \
+		     patch("taxjar_integration.taxjar_integration.tasks.get_client",
+		           side_effect=lambda company: MagicMock() if has_client(company) else None), \
+		     patch("taxjar_integration.taxjar_integration.tasks.frappe.enqueue") as mock_enqueue:
+			retry_failed_taxjar_customer_syncs()
+		return mock_enqueue, get_all
+
+	def test_skips_companies_with_no_credential(self):
+		"""The job would fail again and add one to the retry count. Skipped,
+		the customer stays in the cron until an admin adds the credential."""
+		mock_enqueue, _get_all = self._retry(
+			["CUST-001"], has_client=lambda c: c == "A Co", companies=("A Co", "B Co"),
+		)
+		self.assertEqual([c.kwargs["company"] for c in mock_enqueue.call_args_list], ["A Co"])
+
+	def test_skipped_customers_do_not_take_the_places_of_others(self):
+		"""With the limit on the query, 50 skipped rows kept every other row out."""
+		mock_enqueue, get_all = self._retry(
+			[f"CUST-{i:03}" for i in range(120)], has_client=lambda c: True,
+		)
+		self.assertEqual(get_all.call_args.kwargs["limit_page_length"], 0)
+		self.assertEqual(mock_enqueue.call_count, 50)
+
+	def test_no_credential_sends_nothing(self):
+		mock_enqueue, _get_all = self._retry(["CUST-001", "CUST-002"], has_client=lambda c: False)
+		mock_enqueue.assert_not_called()
 
 
 # ── Customer JS — button removed ─────────────────────────────────────────────
@@ -23430,6 +23502,7 @@ class TestCustomerRetryCronSweepsFirst(UnitTestCase):
 		     patch(f"{_TJ_TASKS}._customer_sync_companies", return_value=["Test Co"]), \
 		     patch(f"{_TJ_TASKS}.frappe.get_all", side_effect=_get_all), \
 		     patch(f"{_TJ_TASKS}._allowed_companies_by_customer", side_effect=dict.fromkeys), \
+		     patch(f"{_TJ_TASKS}.get_client", return_value=MagicMock()), \
 		     patch(f"{_TJ_TASKS}.frappe.enqueue") as mock_enqueue:
 			from taxjar_integration.taxjar_integration.tasks import retry_failed_taxjar_customer_syncs
 			retry_failed_taxjar_customer_syncs()
@@ -24385,6 +24458,7 @@ class TestBulkSyncAndCronRespectTheRestriction(UnitTestCase):
 		     patch(f"{_TJ_TASKS}._customer_sync_companies", return_value=["A Co", "B Co"]), \
 		     patch(f"{_TJ_TASKS}._allowed_companies_by_customer", return_value=self._ALLOWED), \
 		     patch(f"{_TJ_TASKS}.frappe.get_all", return_value=["CUST-001", "CUST-002", "CUST-003"]), \
+		     patch(f"{_TJ_TASKS}.get_client", return_value=MagicMock()), \
 		     patch(f"{_TJ_TASKS}.frappe.enqueue") as mock_enqueue:
 			from taxjar_integration.taxjar_integration.tasks import retry_failed_taxjar_customer_syncs
 			retry_failed_taxjar_customer_syncs()
