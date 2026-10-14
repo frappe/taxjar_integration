@@ -225,11 +225,11 @@ function _legacy_dates(state) {
 	const fields = [
 		{
 			fieldtype: 'Date',
-			label: __('Upgrade date'),
+			label: __('Upgrade Date'),
 			value: state.cutoff_date,
 			tooltip: __('When this site moved from TaxJar v15. Invoices before this date are checked.'),
 		},
-		{ fieldtype: 'Datetime', label: __('Last checked'), value: state.last_run },
+		{ fieldtype: 'Datetime', label: __('Last Checked'), value: state.last_run },
 	];
 	for (const { value, tooltip, ...df } of fields) {
 		const control = frappe.ui.form.make_control({
@@ -245,11 +245,7 @@ function _legacy_dates(state) {
 }
 
 function _legacy_companies(frm, state) {
-	const $section = $(`
-		<div style="display: flex; flex-direction: column; gap: var(--margin-md);">
-			<div style="font-size: var(--text-base); font-weight: 600; color: var(--ink-gray-9);">${__('Companies')}</div>
-		</div>
-	`);
+	const $section = $('<div style="display: flex; flex-direction: column; gap: var(--margin-md);"></div>');
 	$section.append(_legacy_companies_table(frm, state));
 	// What needs attention, under the numbers it explains.
 	const alerts = _legacy_alerts(state);
@@ -266,7 +262,7 @@ function _legacy_total(row) {
 }
 
 function _legacy_period(first_month, cutoff_month) {
-	if (!first_month) return '—';
+	if (!first_month) return '-';
 	const label = (month) => moment(month, 'YYYY-MM').format('MMM YYYY');
 	return first_month === cutoff_month ? label(first_month) : `${label(first_month)} – ${label(cutoff_month)}`;
 }
@@ -280,7 +276,7 @@ function _legacy_companies_table(frm, state) {
 					<th>${__('Period')}</th>
 					<th class="text-right">${__('Invoices')}</th>
 					<th class="text-right">${__('Found')}</th>
-					<th class="text-right">${__('Not found')}</th>
+					<th class="text-right">${__('Not Found')}</th>
 					<th class="text-right legacy-stale-head">${__('Stale in TaxJar')}</th>
 					<th>${__('Result')}</th>
 				</tr></thead>
@@ -324,7 +320,7 @@ function _legacy_companies_table(frm, state) {
 // A dash until the company is checked. A count above zero opens those invoices
 // on the Transaction Sync page.
 function _legacy_count(finished, value, onclick, color) {
-	if (!finished) return $('<span class="text-muted">—</span>');
+	if (!finished) return $('<span class="text-muted">-</span>');
 	if (!value) return $('<span class="text-muted">0</span>');
 	return $('<a href="#"></a>')
 		.css({ 'font-weight': 500, color: color || '' })
@@ -337,14 +333,14 @@ function _legacy_count(finished, value, onclick, color) {
 
 function _legacy_result(frm, state, row, finished) {
 	if (row.pending && !row.has_credential) {
-		return frappe.ui.badge({ label: __('No credential'), theme: 'amber' });
+		return frappe.ui.badge({ label: __('No Credential'), theme: 'amber' });
 	}
 	if (row.pending && state.api_mode !== 'Live') {
-		return frappe.ui.badge({ label: __('Sandbox mode'), theme: 'amber' });
+		return frappe.ui.badge({ label: __('Sandbox Mode'), theme: 'amber' });
 	}
 	if (row.pending && state.status === 'Running') {
 		// "Not checked" until the job reports its first month for this company.
-		const $cell = $('<span></span>').append(frappe.ui.badge({ label: __('Not checked') }));
+		const $cell = $('<span></span>').append(frappe.ui.badge({ label: __('Not Checked') }));
 		frm._legacy_progress[row.company] = $cell;
 		return $cell;
 	}
@@ -353,10 +349,10 @@ function _legacy_result(frm, state, row, finished) {
 	}
 	if (finished) {
 		return row.not_found || row.cancelled_in_taxjar
-			? frappe.ui.badge({ label: __('Needs review'), theme: 'red' })
-			: frappe.ui.badge({ label: __('All found'), theme: 'green' });
+			? frappe.ui.badge({ label: __('Needs Review'), theme: 'red' })
+			: frappe.ui.badge({ label: __('All Found'), theme: 'green' });
 	}
-	return frappe.ui.badge({ label: __('Not checked') });
+	return frappe.ui.badge({ label: __('Not Checked') });
 }
 
 function _legacy_alerts(state) {

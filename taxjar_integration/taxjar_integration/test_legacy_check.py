@@ -835,7 +835,7 @@ class TestTheTab(UnitTestCase):
 			js = handle.read()
 
 		self.assertIn("__('TaxJar Invoice Sync Status')", js)
-		for label in ("Checking…", "All found", "Needs review", "Stale in TaxJar"):
+		for label in ("Checking…", "All Found", "Needs Review", "Stale in TaxJar"):
 			self.assertIn(f"__('{label}')", js)
 
 	def test_the_issues_are_alerts_not_a_summary_line(self):
