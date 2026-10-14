@@ -5295,6 +5295,16 @@ class TestSyncCustomerToTaxJar(UnitTestCase):
 		self.assertIn("not configured", kwargs["error"])
 		self.assertTrue(kwargs["retryable"])
 
+	def test_no_client_does_not_use_up_a_retry(self):
+		"""A save or a manual Retry before the credential exists must not
+		use up the retries that the cron needs once it is added."""
+		with patch("taxjar_integration.taxjar_integration.taxjar_integration.get_client", return_value=None), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration.log_taxjar_call"), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration._set_customer_sync_status") as mock_status:
+			sync_customer_to_taxjar("CUST-001", company="Test Co")
+
+		self.assertIs(mock_status.call_args.kwargs["counted"], False)
+
 	def test_no_client_names_what_the_company_is_missing(self):
 		"""The same message the invoices give, so the admin knows which
 		credential to add."""
@@ -8823,7 +8833,9 @@ class TestEnqueueTaxjarSync(UnitTestCase):
 		# Retryable, so retry_failed_taxjar_syncs() clears it once the token is
 		# entered instead of leaving it to be noticed by hand.
 		self.assertEqual(fields["taxjar_sync_retryable"], 1)
-		self.assertEqual(fields["taxjar_sync_retry_count"], 1)
+		# Not counted: the failure says nothing about the invoice, and counting
+		# it would use up the retries before the credential exists.
+		self.assertEqual(fields["taxjar_sync_retry_count"], 0)
 
 	def test_the_missing_credential_verdict_matches_the_worker(self):
 		"""One condition must not read two ways depending on which path found
@@ -8979,8 +8991,9 @@ class TestEnqueueTaxjarDelete(UnitTestCase):
 
 	def test_a_prior_failure_count_is_carried_forward(self):
 		"""A document that already failed its create sync a few times and is
-		now cancelled continues its run rather than restarting it -
-		TAXJAR_MAX_SYNC_RETRIES counts consecutive failures."""
+		now cancelled keeps its count rather than restarting it -
+		TAXJAR_MAX_SYNC_RETRIES counts consecutive failures. A missing
+		credential does not add one: it says nothing about the document."""
 		doc = _make_doc()
 		doc.taxjar_sync_retry_count = 3
 		doc.db_set = MagicMock()
@@ -8991,7 +9004,7 @@ class TestEnqueueTaxjarDelete(UnitTestCase):
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.enqueue"):
 			enqueue_taxjar_delete(doc, None)
 
-		self.assertEqual(doc.db_set.call_args[0][0]["taxjar_sync_retry_count"], 4)
+		self.assertEqual(doc.db_set.call_args[0][0]["taxjar_sync_retry_count"], 3)
 
 
 class TestSyncCancelledInvoice(UnitTestCase):
@@ -25403,3 +25416,51 @@ class TestDefaultLetterHead(UnitTestCase):
 		self.assertNotIn("Sales Invoice", html)
 		self.assertNotIn("ACC-SINV-0001", html)
 		self.assertIn("letterhead-container", html)
+
+
+class TestMissingCredentialKeepsTheRetryCount(UnitTestCase):
+	"""A failure for a missing credential says nothing about the record. Counted,
+	five saves or Retry presses before the credential exists would keep the
+	record out of the retry cron for good."""
+
+	def test_a_counted_failure_adds_one(self):
+		from taxjar_integration.taxjar_integration.taxjar_integration import _sync_status_fields
+		self.assertEqual(_sync_status_fields("Failed", prior_retry_count=2)["taxjar_sync_retry_count"], 3)
+
+	def test_an_uncounted_failure_keeps_the_count(self):
+		from taxjar_integration.taxjar_integration.taxjar_integration import (
+			_customer_sync_status_fields,
+			_sync_status_fields,
+		)
+		self.assertEqual(
+			_sync_status_fields("Failed", prior_retry_count=2, counted=False)["taxjar_sync_retry_count"], 2
+		)
+		self.assertEqual(
+			_customer_sync_status_fields("Failed", prior_retry_count=2, counted=False)[
+				"taxjar_customer_sync_retry_count"
+			],
+			2,
+		)
+
+	def test_any_other_status_resets_the_count(self):
+		from taxjar_integration.taxjar_integration.taxjar_integration import _sync_status_fields
+		self.assertEqual(
+			_sync_status_fields("Synced", prior_retry_count=2, counted=False)["taxjar_sync_retry_count"], 0
+		)
+
+	def test_the_setters_pass_counted_through(self):
+		from taxjar_integration.taxjar_integration import taxjar_integration as mod
+
+		with patch.object(mod.frappe.db, "get_value", return_value=4), \
+		     patch.object(mod.frappe.db, "set_value") as set_value, \
+		     patch.object(mod, "frappe") as mock_frappe:
+			mock_frappe.db.get_value.return_value = 4
+			mock_frappe.utils.now.return_value = "2026-10-14 00:00:00"
+			with patch.object(mod, "_publish_transaction_update"), patch.object(mod, "_publish_customer_update"):
+				mod._set_sync_status("SINV-1", "Failed", counted=False)
+				mod._set_customer_sync_status("CUST-1", "Failed", counted=False)
+
+		invoice_fields = mock_frappe.db.set_value.call_args_list[0].args[2]
+		customer_fields = mock_frappe.db.set_value.call_args_list[1].args[2]
+		self.assertEqual(invoice_fields["taxjar_sync_retry_count"], 4)
+		self.assertEqual(customer_fields["taxjar_customer_sync_retry_count"], 4)

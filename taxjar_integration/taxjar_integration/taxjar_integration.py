@@ -570,11 +570,12 @@ def enqueue_taxjar_sync(doc, method):
 				"Failed",
 				error=describe_missing_credential(doc.company),
 				# retry_failed_taxjar_syncs() picks these up once the token is
-				# entered. It re-checks company_creates_transactions per invoice and
-				# gives up after TAXJAR_MAX_SYNC_RETRIES, so a company that is never
-				# configured is not re-tried forever.
+				# entered. Until then it skips the company, so a company that is
+				# never configured is not re-tried at all. Not counted: the
+				# failure says nothing about the invoice.
 				retryable=True,
 				prior_retry_count=cint(getattr(doc, "taxjar_sync_retry_count", 0)),
+				counted=False,
 			),
 			update_modified=False,
 		)
@@ -631,6 +632,7 @@ def enqueue_taxjar_delete(doc, method):
 				error=describe_missing_credential(doc.company),
 				retryable=True,
 				prior_retry_count=cint(getattr(doc, "taxjar_sync_retry_count", 0)),
+				counted=False,
 			),
 			update_modified=False,
 		)
@@ -752,7 +754,7 @@ def sync_transaction_to_taxjar(invoice_name):
 	if not client:
 		_set_sync_status(
 			invoice_name, "Failed",
-			error=describe_missing_credential(doc.company), retryable=True,
+			error=describe_missing_credential(doc.company), retryable=True, counted=False,
 		)
 		return
 
@@ -852,7 +854,7 @@ def delete_transaction_from_taxjar(invoice_name):
 	if not client:
 		_set_sync_status(
 			invoice_name, "Failed",
-			error=describe_missing_credential(doc.company), retryable=True,
+			error=describe_missing_credential(doc.company), retryable=True, counted=False,
 		)
 		return
 
@@ -928,13 +930,27 @@ def _publish_transaction_update(invoice_name, status):
 	)
 
 
-def _sync_status_fields(status, error=None, retryable=False, prior_retry_count=0, exclusion_reason=None):
+def _next_retry_count(status, prior_retry_count, counted):
+	"""One more on a counted failure, the same on an uncounted one, and 0 on any
+	other status - see _sync_status_fields()."""
+	if status != "Failed":
+		return 0
+	return prior_retry_count + 1 if counted else prior_retry_count
+
+
+def _sync_status_fields(
+	status, error=None, retryable=False, prior_retry_count=0, exclusion_reason=None, counted=True
+):
 	"""The complete set of sync fields one status change writes.
 
 	Shared by _set_sync_status below, which writes straight to the database from
 	the async paths, and by the two enqueue hooks, which write through the
 	document because they run inside the submit or cancel itself. One definition,
 	so a Failed row looks the same however it was reached.
+
+	``counted=False`` keeps the retry count where it is. A missing credential
+	passes it: that failure says nothing about the document, and counting it
+	would use up the retries before an admin adds the credential.
 	"""
 	if error and retryable:
 		error = f"{error} Automatic retry is scheduled."
@@ -947,7 +963,7 @@ def _sync_status_fields(status, error=None, retryable=False, prior_retry_count=0
 		# re-enqueueing at TAXJAR_MAX_SYNC_RETRIES, so a document that recovers
 		# starts its next run of failures from zero rather than from where the
 		# last one left off.
-		"taxjar_sync_retry_count": prior_retry_count + 1 if status == "Failed" else 0,
+		"taxjar_sync_retry_count": _next_retry_count(status, prior_retry_count, counted),
 		# Cleared unless this write is itself an exclusion: a document kept out in
 		# March and synced in April must not go on explaining why it once was not.
 		"taxjar_exclusion_reason": exclusion_reason or "",
@@ -966,7 +982,7 @@ def _sync_status_fields(status, error=None, retryable=False, prior_retry_count=0
 	return fields
 
 
-def _set_sync_status(invoice_name, status, error=None, retryable=False, exclusion_reason=None):
+def _set_sync_status(invoice_name, status, error=None, retryable=False, exclusion_reason=None, counted=True):
 	"""Update TaxJar sync status fields on a Sales Invoice via db_set, then
 	notify any open form and the Transaction Sync page via realtime so neither
 	sits showing a stale status until manually reloaded. This is reached only
@@ -996,6 +1012,7 @@ def _set_sync_status(invoice_name, status, error=None, retryable=False, exclusio
 		retryable=retryable,
 		prior_retry_count=prior_count,
 		exclusion_reason=exclusion_reason,
+		counted=counted,
 	)
 
 	frappe.db.set_value("Sales Invoice", invoice_name, fields, update_modified=False)
@@ -3923,7 +3940,7 @@ def _publish_customer_update(customer_name, status):
 	)
 
 
-def _customer_sync_status_fields(status, error=None, retryable=False, prior_retry_count=0):
+def _customer_sync_status_fields(status, error=None, retryable=False, prior_retry_count=0, counted=True):
 	"""The complete set of customer sync fields one status change writes.
 
 	Shared by _set_customer_sync_status below, which writes straight to the
@@ -3939,7 +3956,7 @@ def _customer_sync_status_fields(status, error=None, retryable=False, prior_retr
 		"taxjar_customer_sync_status": status,
 		"taxjar_customer_sync_error": error or "",
 		"taxjar_customer_sync_retryable": 1 if status == "Failed" and retryable else 0,
-		"taxjar_customer_sync_retry_count": prior_retry_count + 1 if status == "Failed" else 0,
+		"taxjar_customer_sync_retry_count": _next_retry_count(status, prior_retry_count, counted),
 	}
 
 	# When this row entered the queue, and nothing else. recover_stuck_customer_syncs()
@@ -3953,7 +3970,7 @@ def _customer_sync_status_fields(status, error=None, retryable=False, prior_retr
 	return fields
 
 
-def _set_customer_sync_status(customer_name, status, error=None, retryable=False, extra=None):
+def _set_customer_sync_status(customer_name, status, error=None, retryable=False, extra=None, counted=True):
 	"""Update TaxJar sync status fields on a Customer, then notify any open
 	form via realtime - same reasoning as _set_sync_status's docstring.
 	Reached from on_customer_update (fires on ordinary Customer saves, not
@@ -3973,7 +3990,7 @@ def _set_customer_sync_status(customer_name, status, error=None, retryable=False
 		prior_count = cint(frappe.db.get_value("Customer", customer_name, "taxjar_customer_sync_retry_count"))
 
 	fields = _customer_sync_status_fields(
-		status, error=error, retryable=retryable, prior_retry_count=prior_count
+		status, error=error, retryable=retryable, prior_retry_count=prior_count, counted=counted
 	)
 	fields.update(extra or {})
 
@@ -4082,9 +4099,9 @@ def sync_customer_to_taxjar(customer_name, company=None):
 		# which only ever looks for "Failed" - and the Customers page's Retry
 		# action just re-queues the same no-op.
 		#
-		# Retryable, as the invoice branches are: once an admin enters the
-		# credential, the 15-min cron sends the customer without a manual
-		# Retry. TAXJAR_MAX_SYNC_RETRIES stops the retries until then.
+		# Retryable and not counted, as the invoice branches are: the 15-min
+		# cron skips a company with no credential, and once an admin enters
+		# it, sends the customer without a manual Retry.
 		log_taxjar_call(
 			action="sync_customer",
 			status="skipped",
@@ -4095,6 +4112,7 @@ def sync_customer_to_taxjar(customer_name, company=None):
 			customer_name, "Failed",
 			error=describe_missing_credential(company) if company else _("TaxJar is not configured for this company."),
 			retryable=True,
+			counted=False,
 		)
 		return
 
