@@ -3516,7 +3516,7 @@ def _get_taxjar_customer_id(doc):
 	"""Return the customer_id to send TaxJar for this document's customer.
 
 	Must match whatever sync_customer_to_taxjar() actually stored on TaxJar
-	(Customer.taxjar_customer_id, normalized via _make_safe_customer_id) - not
+	(Customer.taxjar_customer_id, normalized via _new_taxjar_customer_id) - not
 	the raw ERPNext customer name. TaxJar matches a transaction against its
 	stored customer record (and that customer's exempt_regions) by exact
 	customer_id, so sending the unnormalized name (e.g. "Alan Houk" instead of
@@ -3527,7 +3527,7 @@ def _get_taxjar_customer_id(doc):
 	if not customer_name:
 		return None
 	taxjar_customer_id = frappe.db.get_value("Customer", customer_name, "taxjar_customer_id")
-	return taxjar_customer_id or _make_safe_customer_id(customer_name)
+	return taxjar_customer_id or _new_taxjar_customer_id(customer_name)
 
 
 # ── TaxJar error classification ──────────────────────────────────────────────
@@ -3845,7 +3845,7 @@ def _linkify_guided_setup(message):
 # ── TaxJar Customer API ──────────────────────────────────────────────────────
 
 
-def _make_safe_customer_id(customer_name):
+def _make_safe_customer_id(customer_name, force_hash=False):
 	"""Generate a URL-safe customer_id from an ERPNext customer name.
 
 	The python-taxjar client concatenates customer_id directly into the URL
@@ -3853,9 +3853,31 @@ def _make_safe_customer_id(customer_name):
 	characters break the PUT/DELETE endpoints. This function creates a
 	deterministic, URL-safe ID that is consistent between POST body and
 	URL path.
+
+	A name that is already URL-safe is its own ID. A name that has to change
+	gets a short hash of the full name at the end. Without it, "Acme Inc" and
+	"Acme Inc." both became "Acme-Inc", and the second customer's create was
+	adopted as an update of the first customer's TaxJar record.
 	"""
-	safe = re.sub(r"[^a-zA-Z0-9]+", "-", str(customer_name))
-	return safe.strip("-") or customer_name
+	name = str(customer_name)
+	safe = re.sub(r"[^a-zA-Z0-9]+", "-", name).strip("-")
+	if safe == name and not force_hash:
+		return name
+	digest = hashlib.sha256(name.encode()).hexdigest()[:8]
+	return f"{safe}-{digest}" if safe else digest
+
+
+def _new_taxjar_customer_id(customer_name):
+	"""The customer_id for a customer that has none stored yet.
+
+	IDs stored before the hash was added are bare, so an old "Acme-Inc" (from
+	"Acme Inc") can still meet a new customer named "Acme-Inc". The hash
+	separates the new one from it.
+	"""
+	customer_id = _make_safe_customer_id(customer_name)
+	if frappe.db.exists("Customer", {"taxjar_customer_id": customer_id, "name": ("!=", customer_name)}):
+		return _make_safe_customer_id(customer_name, force_hash=True)
+	return customer_id
 
 
 _EXEMPTION_TYPE_MAP = {
@@ -4069,7 +4091,7 @@ def sync_customer_to_taxjar(customer_name, company=None):
 	]
 
 	existing_customer_id = customer_doc.get("taxjar_customer_id")
-	safe_id = existing_customer_id or _make_safe_customer_id(customer_name)
+	safe_id = existing_customer_id or _new_taxjar_customer_id(customer_name)
 
 	customer_data = {
 		"customer_id": safe_id,

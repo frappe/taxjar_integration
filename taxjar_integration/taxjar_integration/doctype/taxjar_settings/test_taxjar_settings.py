@@ -4881,8 +4881,11 @@ class TestGetTaxDataCustomerId(UnitTestCase):
 		so the id stays consistent whenever it does eventually sync."""
 		doc = _make_doc()
 		doc.customer = "Alan Houk"
-		result = self._call_get_tax_data(doc, taxjar_customer_id=None)
-		self.assertEqual(result["customer_id"], "Alan-Houk")
+		with patch(
+			"taxjar_integration.taxjar_integration.taxjar_integration.frappe.db.exists", return_value=None
+		):
+			result = self._call_get_tax_data(doc, taxjar_customer_id=None)
+		self.assertEqual(result["customer_id"], _hashed_id("Alan Houk", "Alan-Houk"))
 
 	def test_customer_id_absent_for_lead_quotation(self):
 		doc = _make_doc()
@@ -5099,13 +5102,14 @@ class TestSyncCustomerToTaxJar(UnitTestCase):
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.db.set_value") as mock_set:
 			sync_customer_to_taxjar("Denna Jaina", company="Test Co")
 
+		safe_id = _hashed_id("Denna Jaina", "Denna-Jaina")
 		payload = mock_client.create_customer.call_args[0][0]
-		self.assertEqual(payload["customer_id"], "Denna-Jaina")
+		self.assertEqual(payload["customer_id"], safe_id)
 		self.assertEqual(payload["name"], "Denna Jaina")
 		# taxjar_customer_id stored as the safe ID, in the one write that also
 		# records the status - see _set_customer_sync_status's `extra`.
 		written = mock_set.call_args[0][2]
-		self.assertEqual(written["taxjar_customer_id"], "Denna-Jaina")
+		self.assertEqual(written["taxjar_customer_id"], safe_id)
 		self.assertEqual(written["taxjar_customer_sync_status"], "Synced")
 
 	def test_existing_customer_uses_update(self):
@@ -10917,6 +10921,13 @@ class TestCustomerDeleteThroughFrappe(UnitTestCase):
 # ── TaxJar Customer API — _make_safe_customer_id ──────────────────────────
 
 
+def _hashed_id(name, safe):
+	"""The id _make_safe_customer_id gives a name it has to change."""
+	import hashlib
+
+	return f"{safe}-{hashlib.sha256(name.encode()).hexdigest()[:8]}"
+
+
 class TestMakeSafeCustomerId(UnitTestCase):
 
 	def test_simple_name_unchanged(self):
@@ -10925,34 +10936,92 @@ class TestMakeSafeCustomerId(UnitTestCase):
 	def test_alphanumeric_with_digits(self):
 		self.assertEqual(_make_safe_customer_id("Customer123"), "Customer123")
 
-	def test_spaces_replaced_with_hyphens(self):
-		self.assertEqual(_make_safe_customer_id("Denna Jaina"), "Denna-Jaina")
-
-	def test_multiple_spaces_collapsed(self):
-		self.assertEqual(_make_safe_customer_id("Don  Bosco"), "Don-Bosco")
-
-	def test_apostrophe_replaced(self):
-		self.assertEqual(_make_safe_customer_id("O'Brien"), "O-Brien")
-
-	def test_ampersand_replaced(self):
-		self.assertEqual(_make_safe_customer_id("AT&T Corp"), "AT-T-Corp")
-
-	def test_mixed_special_chars(self):
-		self.assertEqual(_make_safe_customer_id("Smith & O'Neal (LLC)"), "Smith-O-Neal-LLC")
-
-	def test_leading_trailing_specials_stripped(self):
-		self.assertEqual(_make_safe_customer_id(" -Test- "), "Test")
-
 	def test_already_safe_id_unchanged(self):
 		self.assertEqual(_make_safe_customer_id("CUST-001"), "CUST-001")
 
 	def test_hyphens_preserved(self):
 		self.assertEqual(_make_safe_customer_id("some-id"), "some-id")
 
-	def test_unicode_replaced(self):
-		result = _make_safe_customer_id("Müller GmbH")
-		self.assertNotIn("ü", result)
-		self.assertIn("ller", result)
+	def test_a_changed_name_gets_a_hash_of_the_full_name(self):
+		cases = {
+			"Denna Jaina": "Denna-Jaina",
+			"Don  Bosco": "Don-Bosco",
+			"O'Brien": "O-Brien",
+			"AT&T Corp": "AT-T-Corp",
+			"Smith & O'Neal (LLC)": "Smith-O-Neal-LLC",
+			" -Test- ": "Test",
+		}
+		for name, safe in cases.items():
+			with self.subTest(name=name):
+				self.assertEqual(_make_safe_customer_id(name), _hashed_id(name, safe))
+
+	def test_the_id_is_url_safe(self):
+		for name in ("Denna Jaina", "Müller GmbH", "AT&T Corp", "&&&"):
+			with self.subTest(name=name):
+				self.assertRegex(_make_safe_customer_id(name), r"^[A-Za-z0-9-]+$")
+
+	def test_a_name_with_no_safe_character_is_its_hash(self):
+		# Before, it fell back to the raw name, which is not URL-safe.
+		import hashlib
+
+		self.assertEqual(_make_safe_customer_id("&&&"), hashlib.sha256(b"&&&").hexdigest()[:8])
+
+	def test_the_id_is_the_same_on_every_call(self):
+		self.assertEqual(_make_safe_customer_id("Acme Inc"), _make_safe_customer_id("Acme Inc"))
+
+	def test_names_that_differ_only_in_punctuation_get_different_ids(self):
+		"""Before, all of these became "Acme-Inc", and the second create was
+		adopted as an update of the first customer's TaxJar record."""
+		ids = {_make_safe_customer_id(n) for n in ("Acme Inc", "Acme Inc.", "Acme, Inc", "Acme-Inc")}
+		self.assertEqual(len(ids), 4)
+
+	def test_force_hash_adds_the_hash_to_a_safe_name(self):
+		self.assertEqual(_make_safe_customer_id("Acme-Inc", force_hash=True), _hashed_id("Acme-Inc", "Acme-Inc"))
+
+
+class TestNewTaxjarCustomerId(UnitTestCase):
+	"""IDs stored before the hash was added are bare. A new customer whose
+	name is exactly such an id must not take it."""
+
+	MOD = "taxjar_integration.taxjar_integration.taxjar_integration"
+
+	def test_a_free_id_is_used_as_it_is(self):
+		from taxjar_integration.taxjar_integration.taxjar_integration import _new_taxjar_customer_id
+
+		with patch(f"{self.MOD}.frappe.db.exists", return_value=None):
+			self.assertEqual(_new_taxjar_customer_id("Acme-Inc"), "Acme-Inc")
+
+	def test_an_id_another_customer_holds_gets_the_hash(self):
+		from taxjar_integration.taxjar_integration.taxjar_integration import _new_taxjar_customer_id
+
+		with patch(f"{self.MOD}.frappe.db.exists", return_value="Acme Inc") as exists:
+			self.assertEqual(_new_taxjar_customer_id("Acme-Inc"), _hashed_id("Acme-Inc", "Acme-Inc"))
+
+		filters = exists.call_args[0][1]
+		self.assertEqual(filters["taxjar_customer_id"], "Acme-Inc")
+		self.assertEqual(filters["name"], ("!=", "Acme-Inc"))
+
+	def test_against_the_database(self):
+		"""The same check, with real Customer rows."""
+		from taxjar_integration.taxjar_integration.taxjar_integration import _new_taxjar_customer_id
+
+		if not frappe.db.has_column("Customer", "taxjar_customer_id"):
+			self.skipTest("TaxJar custom fields are not installed")
+
+		holder = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "_TaxJar Id Holder", "customer_type": "Company"}
+		).insert(ignore_permissions=True)
+		try:
+			frappe.db.set_value("Customer", holder.name, "taxjar_customer_id", "_TaxJar-Collide-Probe")
+			self.assertEqual(
+				_new_taxjar_customer_id("_TaxJar-Collide-Probe"),
+				_hashed_id("_TaxJar-Collide-Probe", "TaxJar-Collide-Probe"),
+			)
+			# A customer is never pushed off the id that it holds itself.
+			frappe.db.set_value("Customer", holder.name, "taxjar_customer_id", holder.name)
+			self.assertEqual(_new_taxjar_customer_id(holder.name), _make_safe_customer_id(holder.name))
+		finally:
+			frappe.delete_doc("Customer", holder.name, force=True, ignore_permissions=True)
 
 
 # ── TaxJar Customer API — _has_taxjar_fields_changed with customer_name ────
