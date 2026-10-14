@@ -57,6 +57,10 @@ const AUTOFILE_DOC_URL = "https://support.taxjar.com/article/908-how-does-autofi
 const SETUP_VIDEO_ID = "2RnyQMNnjME";
 const WALKTHROUGH_VIDEO_ID = "Y-ppuE5RsLg";
 
+// The name the analytics give each video (SETUP_VIDEOS in telemetry/events.py).
+// A video that is not here sends no play event, so a new id cannot send a wrong name.
+const VIDEO_NAMES = { [SETUP_VIDEO_ID]: "setup", [WALKTHROUGH_VIDEO_ID]: "features" };
+
 // The video's own thumbnail host. maxresdefault only exists for videos uploaded
 // above 720p, so it 404s on plenty of them; hqdefault is generated for every
 // video and is the fallback (see the error handler on .ts-video-thumb).
@@ -2364,6 +2368,9 @@ class TaxJarSetup {
 			</div>
 		`);
 		$video.data("ts-play", $play.detach());
+
+		const video = VIDEO_NAMES[video_id];
+		if (video) taxjar_integration.track("taxjar_setup_video_played", { video });
 	}
 
 	// Removing the iframe is the one way to stop it: a cross-origin player

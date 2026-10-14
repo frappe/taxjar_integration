@@ -55,6 +55,9 @@ SURVEYS = ("csat",)
 SCORES = (1, 2, 3, 4, 5)
 API_MODES = ("live", "sandbox")
 SETUP_STEPS = ("welcome", "connect", "accounts", "address", "features", "nexus", "review")
+# The two videos on the setup page: the setup walkthrough on the first screen,
+# and the features walkthrough on the "TaxJar is configured" screen.
+SETUP_VIDEOS = ("setup", "features")
 CONNECTION_RESULTS = ("ok", "no_token", "invalid_token", "rejected", "unreachable", "error")
 ADDRESS_RESULTS = ("valid", "not_found", "unsupported_country", "unreachable", "error", "no_credential")
 FAILURE_KINDS = ("connection", "response", "unexpected")
@@ -146,6 +149,7 @@ EVENTS = {
 	"taxjar_setup_connection_tested": {"result": CONNECTION_RESULTS, "api_mode": API_MODES},
 	"taxjar_setup_step_completed": {"step": SETUP_STEPS},
 	"taxjar_setup_step_failed": {"step": SETUP_STEPS},
+	"taxjar_setup_video_played": {"video": SETUP_VIDEOS},
 	"taxjar_setup_address_verified": {"result": ADDRESS_RESULTS},
 	"taxjar_setup_finished": {
 		"api_mode": API_MODES,
@@ -192,5 +196,6 @@ EVENTS = {
 BROWSER_EVENTS = (
 	"taxjar_setup_step_viewed",
 	"taxjar_setup_step_failed",
+	"taxjar_setup_video_played",
 	"taxjar_extra_charges_answered",
 )

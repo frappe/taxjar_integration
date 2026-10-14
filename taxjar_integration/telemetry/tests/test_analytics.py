@@ -101,6 +101,16 @@ class TestBrowserTrack(UnitTestCase):
 
 		capture.assert_called_once_with("taxjar_setup_step_viewed", step="connect")
 
+	def test_sends_a_video_play(self):
+		with patch(f"{TELEMETRY}.capture") as capture:
+			telemetry.track("taxjar_setup_video_played", '{"video": "setup"}')
+
+		capture.assert_called_once_with("taxjar_setup_video_played", video="setup")
+
+	def test_a_video_name_that_is_not_listed_is_dropped(self):
+		properties = telemetry.allowed_properties("taxjar_setup_video_played", {"video": "Y-ppuE5RsLg"})
+		self.assertEqual(properties, {})
+
 	def test_refuses_an_event_that_only_the_server_may_send(self):
 		with patch(f"{TELEMETRY}.capture") as capture:
 			telemetry.track("taxjar_setup_finished", {"companies": 1})
@@ -315,3 +325,20 @@ class TestApiCallCounts(IntegrationTestCase):
 			feature_state.api_call_state(), {"api_calls_tax_calculation": 2, "api_calls_order_create": 1}
 		)
 		self.assertEqual(feature_state.api_call_state(), {})
+
+
+class TestSetupVideoPlays(UnitTestCase):
+	"""The setup page sends a play event, named by the video, when the user clicks play."""
+
+	SOURCE = APP / "taxjar_integration/page/taxjar_setup/taxjar_setup.js"
+
+	def test_each_video_on_the_page_has_a_name(self):
+		source = self.SOURCE.read_text()
+		self.assertIn('[SETUP_VIDEO_ID]: "setup"', source)
+		self.assertIn('[WALKTHROUGH_VIDEO_ID]: "features"', source)
+
+	def test_the_play_handler_sends_the_event(self):
+		source = self.SOURCE.read_text()
+		handler = source[source.index("_play_setup_video_in_row($video) {") :]
+		handler = handler[: handler.index("\n\t}\n")]
+		self.assertIn('taxjar_integration.track("taxjar_setup_video_played", { video });', handler)
