@@ -831,11 +831,10 @@ def sync_transaction_to_taxjar(invoice_name):
 
 		# doc was read at the top of this function, before the create_order/
 		# create_refund call above - if the invoice got cancelled while that
-		# call was in flight, doc.docstatus is stale and a concurrent delete
-		# job (enqueue_taxjar_delete shares this job_id, so it may have been
-		# skipped entirely, or may have already 404'd against an order that
-		# didn't exist yet and read that as "nothing to do") can't be relied
-		# on to have cleaned this up. Re-check against the database and
+		# call was in flight, doc.docstatus is stale. The delete job from
+		# enqueue_taxjar_delete has its own job_id, so it always runs, but it
+		# may run before the order exists. TaxJar then answers the delete
+		# without removing anything. Re-check against the database and
 		# delete what was just created rather than leave it stranded.
 		if frappe.db.get_value("Sales Invoice", invoice_name, "docstatus") == 2:
 			delete_transaction_from_taxjar(invoice_name)
