@@ -9065,7 +9065,7 @@ class TestResyncTransactionGate(UnitTestCase):
 		from taxjar_integration.taxjar_integration.taxjar_integration import resync_transaction
 
 		with patch(f"{self.MOD}.frappe.has_permission"), \
-		     patch(f"{self.MOD}.frappe.db.get_value", return_value="_Test Company"), \
+		     patch(f"{self.MOD}.frappe.db.get_value", return_value=("_Test Company", 1, None)), \
 		     patch(f"{self.MOD}.company_scope", return_value=_files_scope(False)), \
 		     patch(f"{self.MOD}.sync_transaction_to_taxjar") as mock_sync:
 			with self.assertRaises(frappe.ValidationError):
@@ -9077,11 +9077,51 @@ class TestResyncTransactionGate(UnitTestCase):
 		from taxjar_integration.taxjar_integration.taxjar_integration import resync_transaction
 
 		with patch(f"{self.MOD}.frappe.has_permission"), \
-		     patch(f"{self.MOD}.frappe.db.get_value", return_value="_Test Company"), \
+		     patch(f"{self.MOD}.frappe.db.get_value", return_value=("_Test Company", 1, None)), \
 		     patch(f"{self.MOD}.company_scope", return_value=_files_scope(True)), \
 		     patch(f"{self.MOD}.sync_transaction_to_taxjar") as mock_sync:
 			resync_transaction("SINV-TEST-001")
 
+		mock_sync.assert_called_once_with("SINV-TEST-001")
+
+	def _refused(self, docstatus, exclusion_reason=None):
+		from taxjar_integration.taxjar_integration.taxjar_integration import resync_transaction
+
+		with patch(f"{self.MOD}.frappe.has_permission"), \
+		     patch(f"{self.MOD}.frappe.db.get_value", return_value=("_Test Company", docstatus, exclusion_reason)), \
+		     patch(f"{self.MOD}.company_scope", return_value=_files_scope(True)), \
+		     patch(f"{self.MOD}.sync_transaction_to_taxjar") as mock_sync:
+			with self.assertRaises(frappe.ValidationError):
+				resync_transaction("SINV-TEST-001")
+		mock_sync.assert_not_called()
+
+	def test_refuses_a_draft(self):
+		"""A draft can still change or be deleted, and TaxJar would keep the
+		order. The form hides the button; a direct request must fail too."""
+		self._refused(docstatus=0)
+		self.assertIn("Submit SINV-TEST-001 before you sync it to TaxJar.", _thrown_html())
+
+	def test_refuses_an_invoice_the_version_15_check_has_not_checked(self):
+		"""Version 15 may already hold it under its own provider. A sync files
+		it a second time under ERPNext, and clears the marker the check reads."""
+		from taxjar_integration.taxjar_integration.taxjar_integration import EXCLUSION_LEGACY_UNCHECKED
+
+		self._refused(docstatus=1, exclusion_reason=EXCLUSION_LEGACY_UNCHECKED)
+		self.assertIn("Run the check on the Migration tab of TaxJar Settings first.", _thrown_html())
+
+	def test_a_checked_pre_upgrade_invoice_can_be_synced(self):
+		"""Not found by the check means TaxJar does not hold it, so a sync is the
+		way to file it."""
+		from taxjar_integration.taxjar_integration.taxjar_integration import (
+			EXCLUSION_LEGACY_NOT_FOUND,
+			resync_transaction,
+		)
+
+		with patch(f"{self.MOD}.frappe.has_permission"), \
+		     patch(f"{self.MOD}.frappe.db.get_value", return_value=("_Test Company", 1, EXCLUSION_LEGACY_NOT_FOUND)), \
+		     patch(f"{self.MOD}.company_scope", return_value=_files_scope(True)), \
+		     patch(f"{self.MOD}.sync_transaction_to_taxjar") as mock_sync:
+			resync_transaction("SINV-TEST-001")
 		mock_sync.assert_called_once_with("SINV-TEST-001")
 
 	def test_permission_is_checked_before_the_filing_flag(self):

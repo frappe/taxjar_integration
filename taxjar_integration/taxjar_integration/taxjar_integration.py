@@ -688,7 +688,27 @@ def resync_transaction(invoice_name: str):
 	"""
 	require_permission("Sales Invoice", "write", doc=invoice_name)
 
-	company = frappe.db.get_value("Sales Invoice", invoice_name, "company")
+	company, docstatus, exclusion_reason = frappe.db.get_value(
+		"Sales Invoice", invoice_name, ["company", "docstatus", "taxjar_exclusion_reason"]
+	)
+	# The form hides the button in both cases below; these make it true for a
+	# direct request too. A draft can still change or be deleted, and TaxJar
+	# would keep the order. An invoice from before the upgrade may already be
+	# filed under version 15's provider, so a sync files it a second time.
+	if docstatus == 0:
+		frappe.throw(
+			_("Submit {0} before you sync it to TaxJar.").format(invoice_name),
+			title=_("Invoice Not Submitted"),
+		)
+	if exclusion_reason == EXCLUSION_LEGACY_UNCHECKED:
+		frappe.throw(
+			_("{0} was submitted before the upgrade from TaxJar version 15, and TaxJar may "
+			  "already hold it. Run the check on the Migration tab of TaxJar Settings first.").format(
+				invoice_name
+			),
+			title=_("Check Before You Sync"),
+		)
+
 	if not company_scope(company).files:
 		frappe.throw(
 			_("TaxJar transaction filing is turned off for {0}. Turn it on in TaxJar Settings "
