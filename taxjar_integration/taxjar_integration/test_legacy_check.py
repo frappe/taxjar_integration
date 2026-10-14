@@ -577,6 +577,13 @@ class TestTheStateTheTabReads(UnitTestCase):
 
 		self.assertEqual([row["company"] for row in state["companies"]], ["ACME"])
 
+	def test_no_credential_lookup_for_a_company_the_caller_cannot_read(self):
+		"""has_credential would tell the caller whether that company has a
+		Live token."""
+		self._state(STATUS_DONE, job_alive=False, readable=())
+
+		self.assertEqual([c.args[0] for c in self.get_client.call_args_list], ["ACME"])
+
 	def test_readable_companies_come_from_a_permission_checked_list(self):
 		with patch(f"{_LC}.frappe.get_list", return_value=["Old Co"]) as get_list:
 			readable = legacy_check._companies_with_readable_invoices({"Old Co": {}, "Other Co": {}})
