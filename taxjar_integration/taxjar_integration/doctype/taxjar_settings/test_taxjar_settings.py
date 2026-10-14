@@ -8363,6 +8363,18 @@ class TestAddressValidationWithTaxJar(UnitTestCase):
 			inspect.Parameter.empty,
 		)
 
+	def test_each_log_row_names_the_company(self):
+		"""The payload is a street address. A row with no company shows to every
+		API Log reader, User Permissions or not."""
+		client = MagicMock()
+		client.validate_address.return_value = []
+		with patch(f"{self.MOD}.get_client", return_value=client), \
+		     patch(f"{self.MOD}.log_taxjar_call") as mock_log:
+			_validate_address_with_taxjar(self._make_address_doc(), "Test Co")
+
+		self.assertTrue(mock_log.call_args_list)
+		self.assertEqual({c.kwargs["context"]["company"] for c in mock_log.call_args_list}, {"Test Co"})
+
 	def test_a_match_is_reported_as_valid(self):
 		client = MagicMock()
 		client.validate_address.return_value = [MagicMock(city="Austin", state="TX")]
@@ -23314,7 +23326,7 @@ class TestRecoverStuckCustomerSyncs(UnitTestCase):
 	"""The safety net. Whatever strands a customer at "Queued", this hands it to
 	the retry cron, which is already capped at TAXJAR_MAX_SYNC_RETRIES."""
 
-	def _run(self, stuck_names):
+	def _run(self, stuck_names, companies=("Test Co",), allowed=None):
 		captured = {}
 
 		def _get_all(doctype, **kwargs):
@@ -23323,6 +23335,9 @@ class TestRecoverStuckCustomerSyncs(UnitTestCase):
 			return list(stuck_names)
 
 		with patch(f"{_TJ}.frappe.get_all", side_effect=_get_all), \
+		     patch(f"{_TJ}._customer_sync_companies", return_value=list(companies)), \
+		     patch(f"{_TJ}._allowed_companies_by_customer",
+		           side_effect=lambda names: allowed if allowed is not None else dict.fromkeys(names)), \
 		     patch(f"{_TJ}.log_taxjar_call") as mock_log, \
 		     patch(f"{_TJ}._set_customer_sync_status") as mock_status:
 			from taxjar_integration.taxjar_integration.taxjar_integration import recover_stuck_customer_syncs
@@ -23373,6 +23388,21 @@ class TestRecoverStuckCustomerSyncs(UnitTestCase):
 		_recovered, _captured, _status, mock_log = self._run(["CUST-001"])
 		mock_log.assert_called_once()
 		self.assertEqual(mock_log.call_args[1]["status"], "error")
+
+	def test_the_record_names_each_company_the_customer_syncs_to(self):
+		"""A row with no company shows to every API Log reader, User
+		Permissions or not."""
+		_recovered, _captured, _status, mock_log = self._run(
+			["CUST-001"], companies=("A Co", "B Co", "C Co"), allowed={"CUST-001": {"A Co", "C Co"}},
+		)
+		self.assertEqual(
+			[c.kwargs["context"]["company"] for c in mock_log.call_args_list], ["A Co", "C Co"]
+		)
+
+	def test_a_customer_with_no_company_still_becomes_failed(self):
+		_recovered, _captured, mock_status, mock_log = self._run(["CUST-001"], companies=())
+		mock_log.assert_not_called()
+		mock_status.assert_called_once()
 
 	def test_nothing_stuck_writes_nothing(self):
 		_recovered, _captured, mock_status, mock_log = self._run([])

@@ -3498,7 +3498,7 @@ def _validate_address_with_taxjar(doc, company):
 		"street": doc.address_line1 or "",
 	}
 
-	ctx = {"doctype": "Address", "name": doc.name}
+	ctx = {"doctype": "Address", "name": doc.name, "company": company}
 
 	try:
 		log_taxjar_call(action="validate_address", status="request", payload=address_data, context=ctx)
@@ -4826,13 +4826,20 @@ def recover_stuck_customer_syncs():
 		limit=50,
 	)
 
+	# One log row per company the customer syncs to, the companies the retry
+	# cron will send it to. A row with no company shows to every API Log
+	# reader, User Permissions or not.
+	companies = _customer_sync_companies()
+	allowed = _allowed_companies_by_customer(stuck)
+
 	for customer_name in stuck:
-		log_taxjar_call(
-			action="sync_customer",
-			status="error",
-			error=f"Queued for more than {TAXJAR_QUEUED_STUCK_MINUTES} minutes with no job to finish it",
-			context={"doctype": "Customer", "name": customer_name},
-		)
+		for company in _restrict_companies(companies, allowed[customer_name]):
+			log_taxjar_call(
+				action="sync_customer",
+				status="error",
+				error=f"Queued for more than {TAXJAR_QUEUED_STUCK_MINUTES} minutes with no job to finish it",
+				context={"doctype": "Customer", "name": customer_name, "company": company},
+			)
 		_set_customer_sync_status(
 			customer_name,
 			"Failed",
