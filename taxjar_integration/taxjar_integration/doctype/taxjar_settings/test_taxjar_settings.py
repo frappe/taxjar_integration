@@ -24498,6 +24498,59 @@ class TestChargeRowsPrintTheirDescriptionOnly(UnitTestCase):
 		self.assertIn("Taxable", html)
 
 
+class TestCashDiscountPrintsAboveGrandTotal(UnitTestCase):
+	"""A cash or non-trade discount prints its own row in the totals.
+
+	ERPNext takes this discount off Grand Total after tax and leaves
+	net_amount alone, so the item Discount column cannot show it. Without
+	the row, Net Total plus the taxes does not foot to Grand Total.
+	"""
+
+	DISCOUNT_ROW = re.compile(r"\{%\s*if doc\.discount_amount.*?\{%\s*endif\s*%\}", re.S)
+
+	def _html(self):
+		import os
+
+		path = os.path.normpath(os.path.join(
+			os.path.dirname(__file__), "..", "..",
+			"print_format", "us_sales_tax_(invoice,_dn,_cn)", "us_sales_tax_(invoice,_dn,_cn).html",
+		))
+		with open(path) as handle:
+			return handle.read()
+
+	def _printed(self, apply_discount_on="Grand Total", cash=1, discount_amount=10):
+		block = self.DISCOUNT_ROW.search(self._html())
+		self.assertIsNotNone(block, "the totals no longer have a discount row")
+		doc = frappe._dict(
+			discount_amount=discount_amount,
+			apply_discount_on=apply_discount_on,
+			is_cash_or_non_trade_discount=cash,
+		)
+		doc.get_formatted = lambda fieldname, doc=None: "$10.00"
+		return frappe.render_template(block.group(0), {"doc": doc})
+
+	def test_a_cash_discount_prints_a_discount_row(self):
+		html = self._printed()
+		self.assertIn("Discount:", html)
+		self.assertIn("-$10.00", html)
+
+	def test_the_row_sits_between_the_charges_and_grand_total(self):
+		html = self._html()
+		row = self.DISCOUNT_ROW.search(html).start()
+		self.assertLess(html.index("{%- endfor -%}", html.index("ad_hoc_rows + shipping_rows")), row)
+		self.assertLess(row, html.index('class="taxjar-grand-total"'))
+
+	def test_a_trade_discount_on_grand_total_prints_no_row(self):
+		"""ERPNext spreads it over net_amount, so the item column shows it."""
+		self.assertNotIn("Discount:", self._printed(cash=0))
+
+	def test_a_discount_on_net_total_prints_no_row(self):
+		self.assertNotIn("Discount:", self._printed(apply_discount_on="Net Total"))
+
+	def test_no_discount_prints_no_row(self):
+		self.assertNotIn("Discount:", self._printed(discount_amount=0))
+
+
 # ── The workspace roles reach every site ─────────────────────────────────────
 
 

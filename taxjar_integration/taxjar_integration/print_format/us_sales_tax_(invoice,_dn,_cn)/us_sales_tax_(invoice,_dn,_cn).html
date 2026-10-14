@@ -129,7 +129,7 @@
 						</tr>
 						{% endif %}
 						<tr>
-							<td class="title">{{ _("Invoice Date") }}</td>
+							<td class="title">{{ _("Date") }}</td>
 							<td class="info-text text-right">{{ doc.get_formatted("posting_date") }}</td>
 						</tr>
 						{% if doc.due_date %}
@@ -337,13 +337,14 @@
 		<div class="taxjar-totals-column">
 			<table style="width: 100%; border-collapse: collapse">
 				{#
-					Discount doesn't get its own row here - it's shown per
-					line item instead (see the item table's Discount
-					column), so Net Total (already net of any item-level and,
-					where apply_discount_on is "Net Total", document-level
-					discount) is the right starting figure for a column that
-					has to foot to Grand Total without a discount line to
-					explain the gap.
+					A trade discount doesn't get its own row here - it's shown
+					per line item instead (see the item table's Discount
+					column), so Net Total (already net of any item-level and
+					any distributed document-level discount) is the right
+					starting figure. A cash or non-trade discount is the one
+					exception: ERPNext takes it off Grand Total after tax and
+					leaves net_amount alone, so it gets the row just above
+					Grand Total.
 				#}
 				<tr class="row-divider">
 					<td class="text-right title" style="padding-right: 12px !important;">{{ _("Net Total") }}:</td>
@@ -391,6 +392,12 @@
 						<td class="text-right">{{ tax.get_formatted("tax_amount", doc) }}</td>
 					</tr>
 				{%- endfor -%}
+				{% if doc.discount_amount and doc.apply_discount_on == "Grand Total" and doc.is_cash_or_non_trade_discount %}
+				<tr class="row-divider">
+					<td class="text-right title" style="padding-right: 12px !important;">{{ _("Discount") }}:</td>
+					<td class="text-right">-{{ doc.get_formatted("discount_amount", doc) }}</td>
+				</tr>
+				{% endif %}
 				<tr class="taxjar-grand-total">
 					<td class="text-right title" style="padding-right: 12px !important;"><b>{{ _("Grand Total") }}:</b></td>
 					<td class="text-right"><b>{{ doc.get_formatted("grand_total", doc) }}</b></td>
