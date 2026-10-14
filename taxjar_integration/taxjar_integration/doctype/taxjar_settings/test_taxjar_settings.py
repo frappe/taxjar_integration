@@ -5281,13 +5281,10 @@ class TestSyncCustomerToTaxJar(UnitTestCase):
 		args, kwargs = mock_status.call_args
 		self.assertEqual(args, ("CUST-001", "Failed"))
 
-	def test_no_client_is_not_retryable(self):
-		"""A missing/misconfigured credential for this company is a config
-		problem, not a transient one - retrying every 15 minutes forever
-		achieves nothing until a human fixes it (contrast with a real
-		TaxJarConnectionError or 5xx, which stays retryable via
-		classify_taxjar_error()). retryable defaults to False, so this must
-		not be passed as True."""
+	def test_no_client_is_retryable(self):
+		"""The same as the invoice branches: the 15-min cron selects only
+		retryable rows, so this is what sends the customer once an admin
+		enters the credential. TAXJAR_MAX_SYNC_RETRIES stops it until then."""
 		with patch("taxjar_integration.taxjar_integration.taxjar_integration.get_client", return_value=None), \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.log_taxjar_call"), \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration._set_customer_sync_status") as mock_status:
@@ -5296,7 +5293,20 @@ class TestSyncCustomerToTaxJar(UnitTestCase):
 		args, kwargs = mock_status.call_args
 		self.assertEqual(args, ("CUST-001", "Failed"))
 		self.assertIn("not configured", kwargs["error"])
-		self.assertNotIn("retryable", kwargs)
+		self.assertTrue(kwargs["retryable"])
+
+	def test_no_client_names_what_the_company_is_missing(self):
+		"""The same message the invoices give, so the admin knows which
+		credential to add."""
+		with patch("taxjar_integration.taxjar_integration.taxjar_integration.get_client", return_value=None), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration.log_taxjar_call"), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration.describe_missing_credential",
+		           return_value="Test Co has no Live API token.") as describe, \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration._set_customer_sync_status") as mock_status:
+			sync_customer_to_taxjar("CUST-001", company="Test Co")
+
+		describe.assert_called_once_with("Test Co")
+		self.assertEqual(mock_status.call_args.kwargs["error"], "Test Co has no Live API token.")
 
 	def test_exempt_regions_serialized(self):
 		"""Exempt regions from child table should appear as dicts in the payload."""

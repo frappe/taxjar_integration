@@ -4081,13 +4081,21 @@ def sync_customer_to_taxjar(customer_name, company=None):
 		# stays at "Queued" forever - invisible to retry_failed_taxjar_customer_syncs,
 		# which only ever looks for "Failed" - and the Customers page's Retry
 		# action just re-queues the same no-op.
+		#
+		# Retryable, as the invoice branches are: once an admin enters the
+		# credential, the 15-min cron sends the customer without a manual
+		# Retry. TAXJAR_MAX_SYNC_RETRIES stops the retries until then.
 		log_taxjar_call(
 			action="sync_customer",
 			status="skipped",
 			error="TaxJar client is not configured",
 			context={"doctype": "Customer", "name": customer_name, "company": company},
 		)
-		_set_customer_sync_status(customer_name, "Failed", error="TaxJar is not configured for this company.")
+		_set_customer_sync_status(
+			customer_name, "Failed",
+			error=describe_missing_credential(company) if company else _("TaxJar is not configured for this company."),
+			retryable=True,
+		)
 		return
 
 	customer_doc = frappe.get_doc("Customer", customer_name)
