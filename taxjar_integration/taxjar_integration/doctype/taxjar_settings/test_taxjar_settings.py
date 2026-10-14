@@ -6968,6 +6968,13 @@ class TestDeskPageLifecycleJS(UnitTestCase):
 		"taxjar_customers": ("Customer", "taxjar_customers_update"),
 	}
 
+	# The debounced refresh. The Customers page wraps it in a handler that also
+	# reports a finished bulk exemption job, so the two names differ there.
+	DEBOUNCED_REFRESH = {
+		"taxjar_transactions": "_on_sync_update",
+		"taxjar_customers": "_refresh_soon",
+	}
+
 	def _read_page_js(self, page):
 		import os
 		path = os.path.join(
@@ -7015,7 +7022,7 @@ class TestDeskPageLifecycleJS(UnitTestCase):
 				js = self._read_page_js(page)
 				on_hide = js.split("\ton_hide() {")[1].split("\n\t}")[0]
 				self.assertIn("frappe.realtime.off(SYNC_UPDATE_EVENT, this._on_sync_update)", on_hide)
-				self.assertIn("this._on_sync_update.cancel()", on_hide)
+				self.assertIn(f"this.{self.DEBOUNCED_REFRESH[page]}.cancel()", on_hide)
 				self.assertNotIn("doctype_unsubscribe", on_hide)
 
 	def test_realtime_handler_is_debounced_and_stored_once(self):
@@ -7025,7 +7032,8 @@ class TestDeskPageLifecycleJS(UnitTestCase):
 			with self.subTest(page=page):
 				js = self._read_page_js(page)
 				self.assertIn(
-					"this._on_sync_update = frappe.utils.debounce(() => this.refresh(), 500);", js
+					f"this.{self.DEBOUNCED_REFRESH[page]} = frappe.utils.debounce(() => this.refresh(), 500);",
+					js,
 				)
 
 	def test_pages_bind_hide_to_release_the_listener(self):
@@ -7487,6 +7495,20 @@ class TestCustomerConfigPageJS(UnitTestCase):
 		))
 		with open(path) as f:
 			return f.read()
+
+	def test_clicking_the_active_card_again_keeps_the_tab(self):
+		"""The strip hands over null when the active card is clicked again. A tab
+		card has no "no tab" state, so the page stays on its tab. Before, null
+		found no tab and fell through to the Exempted drill-down."""
+		fn = self._js().split("\ton_summary_select(card) {")[1].split("\n\t}\n")[0]
+		null_branch = fn.split("if (!card) {")[1].split("\n\t\t}\n")[0]
+		self.assertIn("this.summary.set_active(this.active_tab)", null_branch)
+		self.assertIn("return;", null_branch)
+		self.assertNotIn("go_to_tab", null_branch)
+		# A cleared sync status card clears its filter and stays on the tab.
+		self.assertIn("this.status_filter = null", null_branch)
+		# The null branch comes first, so nothing after it reads card?.
+		self.assertNotIn("card?.value_key || null", fn)
 
 	def _utils_js(self):
 		"""The shared bundle, where the region hover card this page opens lives."""
@@ -22125,6 +22147,52 @@ class TestBulkExemptionDoesNotRunInline(UnitTestCase):
 
 		self.assertEqual(done, ["C1", "C3"])
 		self.assertIn("C2", mock_log.call_args[1]["title"])
+
+	def test_the_job_reports_on_the_event_the_page_listens_to(self):
+		"""The Customers page listens for taxjar_customers_update. An event of any
+		other name leaves the page showing the rows from before the job."""
+		from taxjar_integration.taxjar_integration.page.taxjar_customers import (
+			taxjar_customers as page,
+		)
+
+		def _write(name, exemption_type, regions):
+			if name == "C2":
+				raise frappe.ValidationError("nope")
+
+		with patch.object(page, "_write_exemption", side_effect=_write), \
+		     patch.object(page.frappe, "log_error"), \
+		     patch.object(page.frappe, "publish_realtime") as mock_publish:
+			page.apply_exemption_in_background(["C1", "C2", "C3"], "Wholesale", [])
+
+		mock_publish.assert_called_once()
+		args, kwargs = mock_publish.call_args
+		self.assertEqual(args[0], "taxjar_customers_update")
+		self.assertEqual(args[1], {"bulk_exemption_done": 2, "bulk_exemption_failed": 1})
+		# The job commits when it returns. A refresh before that reads old rows.
+		self.assertTrue(kwargs["after_commit"])
+
+	def _page_js(self):
+		import os
+
+		path = os.path.normpath(os.path.join(
+			os.path.dirname(__file__), "..", "..", "page", "taxjar_customers", "taxjar_customers.js"
+		))
+		with open(path) as f:
+			return f.read()
+
+	def test_the_page_does_not_say_updated_for_a_queued_job(self):
+		js = self._page_js()
+		save_fn = js.split("save_exemption(rows, exemption_type, regions) {")[1].split("\n\t}\n")[0]
+		self.assertIn("r.queued", save_fn)
+		self.assertIn("Updating {0} customers in the background", save_fn)
+
+		# The finished job is reported from the realtime event, with its failures.
+		handler = js.split("this._on_sync_update = (data) => {")[1].split("\n\t\t};")[0]
+		self.assertIn("this.report_bulk_exemption(data)", handler)
+		self.assertIn("this._refresh_soon()", handler)
+		report_fn = js.split("report_bulk_exemption(data) {")[1].split("\n\t}\n")[0]
+		self.assertIn("bulk_exemption_failed", report_fn)
+		self.assertIn("see the Error Log", report_fn)
 
 
 # ── Item tax field namespacing ──────────────────────────────────────────────

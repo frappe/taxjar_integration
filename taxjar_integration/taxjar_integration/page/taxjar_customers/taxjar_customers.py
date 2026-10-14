@@ -455,18 +455,25 @@ def _write_exemption(name, exemption_type, regions):
 def apply_exemption_in_background(customers, exemption_type, regions):
 	"""Background worker for a bulk exemption edit. Not whitelisted: the endpoint
 	above has already checked write permission on every name."""
+	failed = 0
 	for name in customers:
 		try:
 			_write_exemption(name, exemption_type, regions)
 		except Exception:
 			# One customer's failure is not the batch's. Logged per row so the
 			# admin can see which, rather than losing the rest to a dead job.
+			failed += 1
 			frappe.log_error(
 				title=f"TaxJar: could not set exemption on {name}",
 				message=frappe.get_traceback(with_context=True),
 			)
+	# The page's own event, to the user who started the job. after_commit: the
+	# job commits when it returns, and a refresh before that reads the old rows.
 	frappe.publish_realtime(
-		"taxjar_customer_sync_update", {"bulk_exemption_done": len(customers)}, user=frappe.session.user
+		"taxjar_customers_update",
+		{"bulk_exemption_done": len(customers) - failed, "bulk_exemption_failed": failed},
+		user=frappe.session.user,
+		after_commit=True,
 	)
 
 

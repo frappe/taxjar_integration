@@ -67,7 +67,11 @@ class TaxJarCustomerConfig {
 		// Same reasoning as taxjar_transactions.js: one stable reference so
 		// off() can detach it, debounced so a bulk sync of N customers doesn't
 		// fire N refreshes.
-		this._on_sync_update = frappe.utils.debounce(() => this.refresh(), 500);
+		this._refresh_soon = frappe.utils.debounce(() => this.refresh(), 500);
+		this._on_sync_update = (data) => {
+			if (data?.bulk_exemption_done !== undefined) this.report_bulk_exemption(data);
+			this._refresh_soon();
+		};
 
 		this.make_filters();
 		this.make_summary();
@@ -86,7 +90,7 @@ class TaxJarCustomerConfig {
 	// taxjar_transactions.js for why leaving the room would be unsafe.
 	on_hide() {
 		frappe.realtime.off(SYNC_UPDATE_EVENT, this._on_sync_update);
-		this._on_sync_update.cancel();
+		this._refresh_soon.cancel();
 		this._hide_sync_popover();
 	}
 
@@ -327,7 +331,21 @@ class TaxJarCustomerConfig {
 		this.summary.set_active(active);
 	}
 
+	// The strip clears its selection when the active card is clicked again, and
+	// hands over null. A sync status card clears to its whole tab. A tab card
+	// has no "no tab" state to clear to, so it stays where it is.
 	on_summary_select(card) {
+		if (!card) {
+			if (this.status_filter) {
+				this.status_filter = null;
+				this.current_page = 1;
+				this.reset_selection();
+				this.refresh();
+			}
+			this.summary.set_active(this.active_tab);
+			return;
+		}
+
 		const tab = TABS.map((t) => t.name).find((name) => name === card?.value_key);
 		if (tab) {
 			this.go_to_tab(tab);
@@ -338,7 +356,7 @@ class TaxJarCustomerConfig {
 		// A sync status only describes an exempt customer, so drill into the
 		// Exemptions tab alongside it.
 		if (this.active_tab !== EXEMPT_TAB) this.go_to_tab(EXEMPT_TAB);
-		this.status_filter = card?.value_key || null;
+		this.status_filter = card.value_key;
 		this.summary.set_active(this.status_filter);
 		this.current_page = 1;
 		this.reset_selection();
@@ -849,12 +867,32 @@ class TaxJarCustomerConfig {
 				{ customers: rows.map((r) => r.name), exemption_type, regions }
 			)
 			.then((r) => {
+				// A queued edit has not happened yet. The job reports the result
+				// on the page's realtime event, in report_bulk_exemption().
 				frappe.show_alert({
-					message: __("Updated {0} customers", [r.updated]),
-					indicator: "green",
+					message: r.queued
+						? __("Updating {0} customers in the background", [r.updated])
+						: __("Updated {0} customers", [r.updated]),
+					indicator: r.queued ? "blue" : "green",
 				});
 				this.after_bulk_action();
 			});
+	}
+
+	report_bulk_exemption(data) {
+		const failed = data.bulk_exemption_failed || 0;
+		frappe.show_alert(
+			{
+				message: failed
+					? __("Updated {0} customers. {1} could not be updated, see the Error Log.", [
+							data.bulk_exemption_done,
+							failed,
+					  ])
+					: __("Updated {0} customers", [data.bulk_exemption_done]),
+				indicator: failed ? "orange" : "green",
+			},
+			failed ? 10 : 5
+		);
 	}
 
 }
