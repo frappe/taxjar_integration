@@ -135,10 +135,12 @@ frappe
 def after_install():
 	setup_taxjar()
 	set_default_print_format()
+	set_default_letter_head()
 
 
 def after_migrate():
 	setup_taxjar()
+	set_default_letter_head()
 
 
 def setup_taxjar():
@@ -371,3 +373,64 @@ def set_default_print_format():
 		}
 	).insert(ignore_permissions=True)
 	frappe.clear_cache(doctype="Sales Invoice")
+
+
+# The app's own letter head: the company block of ERPNext's "Company Letterhead
+# - Grey" without the document type and number. Every print format prints its
+# own title, so the header suits any document.
+LETTER_HEAD = "US Company Letter Head"
+LETTER_HEAD_SAVEPOINT = "taxjar_default_letter_head"
+
+
+def set_default_letter_head():
+	"""Make LETTER_HEAD the site's default letter head for documents.
+
+	Only when no enabled document letter head is the default. A default that
+	the site chose stays.
+
+	On install and on every migrate, unlike set_default_print_format. A
+	standard letter head is read-only in the form, so an admin cannot clear
+	this default - only choose another, which this check keeps. And Frappe
+	keeps no Letter Head field when it imports the JSON again, so the first
+	update to the file resets is_default; the next run sets it back.
+
+	A failure here never stops an install or a migrate. A missing default is
+	a cosmetic loss, a failed migrate is not. The savepoint undoes only this
+	function's writes, not the rest of the migrate's open transaction.
+	"""
+	try:
+		frappe.db.savepoint(LETTER_HEAD_SAVEPOINT)
+		_set_default_letter_head()
+	except Exception:
+		frappe.db.rollback(save_point=LETTER_HEAD_SAVEPOINT)
+		frappe.log_error(title=f"TaxJar: could not make {LETTER_HEAD} the default letter head")
+	else:
+		frappe.db.release_savepoint(LETTER_HEAD_SAVEPOINT)
+
+
+def _set_default_letter_head():
+	"""db.set_value, not save(): validate() refuses any change to a standard
+	letter head outside developer mode. ERPNext's own v16 default-letter-head
+	patch writes it the same way. Clearing the other rows and the two system
+	defaults is what on_update() does on a normal save.
+	"""
+	# letter_head_for splits document and report letter heads. A Frappe without
+	# the field has one kind only, so every letter head is a document one.
+	scope = {"letter_head_for": "DocType"} if frappe.get_meta("Letter Head").has_field("letter_head_for") else {}
+
+	if frappe.db.exists("Letter Head", {"is_default": 1, "disabled": 0, **scope}):
+		return
+	if not frappe.db.exists("Letter Head", {"name": LETTER_HEAD, "disabled": 0, **scope}):
+		return
+
+	# A disabled row can still carry the flag. Two flags would leave the
+	# default to whichever row a query happens to read first.
+	frappe.db.set_value(
+		"Letter Head", {"name": ["!=", LETTER_HEAD], **scope}, "is_default", 0, update_modified=False
+	)
+	frappe.db.set_value("Letter Head", LETTER_HEAD, "is_default", 1, update_modified=False)
+	frappe.db.set_default("letter_head", LETTER_HEAD)
+	frappe.db.set_default(
+		"default_letter_head_content", frappe.db.get_value("Letter Head", LETTER_HEAD, "content")
+	)
+	frappe.clear_cache()

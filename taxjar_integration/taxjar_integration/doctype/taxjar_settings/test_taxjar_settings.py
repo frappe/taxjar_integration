@@ -24852,3 +24852,169 @@ class TestDefaultPrintFormat(UnitTestCase):
 		rename_doc, delete_doc = self._rename(old_exists=False, new_exists=True)
 		rename_doc.assert_not_called()
 		delete_doc.assert_not_called()
+
+
+class TestDefaultLetterHead(UnitTestCase):
+	"""The app ships "US Company Letter Head" and makes it the site's default
+	letter head for documents, but only where no letter head is the default.
+	It runs on every migrate, so it must never stop one."""
+
+	def _set(self, default_exists=False, letter_head_exists=True, has_scope_field=True, exists_error=None):
+		from taxjar_integration import install
+
+		def exists(doctype, filters):
+			if exists_error:
+				raise exists_error
+			return letter_head_exists if filters.get("name") == install.LETTER_HEAD else default_exists
+
+		meta = MagicMock()
+		meta.has_field.return_value = has_scope_field
+		with patch.object(install.frappe.db, "exists", side_effect=exists) as exists_mock, \
+		     patch.object(install.frappe, "get_meta", return_value=meta), \
+		     patch.object(install.frappe.db, "set_value", autospec=True) as set_value, \
+		     patch.object(install.frappe.db, "get_value", return_value="<table/>"), \
+		     patch.object(install.frappe.db, "set_default", autospec=True) as set_default, \
+		     patch.object(install.frappe.db, "savepoint", autospec=True) as savepoint, \
+		     patch.object(install.frappe.db, "rollback", autospec=True) as rollback, \
+		     patch.object(install.frappe.db, "release_savepoint", autospec=True) as release, \
+		     patch.object(install.frappe, "log_error") as log_error, \
+		     patch.object(install.frappe, "clear_cache"):
+			install.set_default_letter_head()
+		return frappe._dict(
+			exists=exists_mock, set_value=set_value, set_default=set_default, savepoint=savepoint,
+			rollback=rollback, release=release, log_error=log_error,
+		)
+
+	def _json(self):
+		import os
+
+		from taxjar_integration import install
+
+		folder = frappe.scrub(install.LETTER_HEAD)
+		path = os.path.join(frappe.get_module_path("TaxJar Integration"), "letter_head", folder, f"{folder}.json")
+		with open(path) as f:
+			return json.load(f)
+
+	def test_an_empty_default_gets_the_app_letter_head(self):
+		from taxjar_integration import install
+
+		run = self._set()
+
+		run.set_value.assert_any_call("Letter Head", install.LETTER_HEAD, "is_default", 1, update_modified=False)
+		run.set_default.assert_has_calls([
+			call("letter_head", install.LETTER_HEAD),
+			call("default_letter_head_content", "<table/>"),
+		])
+		run.release.assert_called_once_with(install.LETTER_HEAD_SAVEPOINT)
+		run.log_error.assert_not_called()
+
+	def test_the_flag_is_cleared_on_every_other_document_letter_head(self):
+		"""A disabled row can still carry is_default. A normal save clears the
+		others the same way."""
+		from taxjar_integration import install
+
+		run = self._set()
+
+		run.set_value.assert_any_call(
+			"Letter Head", {"name": ["!=", install.LETTER_HEAD], "letter_head_for": "DocType"},
+			"is_default", 0, update_modified=False,
+		)
+
+	def test_a_default_the_site_chose_stays(self):
+		run = self._set(default_exists=True)
+		run.set_value.assert_not_called()
+		run.set_default.assert_not_called()
+
+	def test_nothing_is_set_when_the_letter_head_is_missing_or_disabled(self):
+		run = self._set(letter_head_exists=False)
+		run.set_value.assert_not_called()
+		run.set_default.assert_not_called()
+
+	def test_a_frappe_without_letter_head_for_reads_every_letter_head(self):
+		run = self._set(has_scope_field=False)
+		for c in run.exists.call_args_list:
+			self.assertNotIn("letter_head_for", c.args[1])
+		for c in run.set_value.call_args_list:
+			if isinstance(c.args[1], dict):
+				self.assertNotIn("letter_head_for", c.args[1])
+
+	def test_an_error_is_logged_and_never_stops_the_migrate(self):
+		"""Only this function's writes are undone, through its own savepoint -
+		not the rest of the migrate's transaction."""
+		from taxjar_integration import install
+
+		run = self._set(exists_error=frappe.db.InternalError("table locked"))
+
+		run.rollback.assert_called_once_with(save_point=install.LETTER_HEAD_SAVEPOINT)
+		run.log_error.assert_called_once()
+		run.release.assert_not_called()
+		run.set_value.assert_not_called()
+
+	def test_on_the_real_database(self):
+		"""No mocks: the real queries, run inside a savepoint that is rolled
+		back, so the site keeps its own default."""
+		from taxjar_integration import install
+
+		if not frappe.db.exists("Letter Head", install.LETTER_HEAD):
+			self.skipTest("the app's letter head is not imported on this site")
+
+		frappe.db.savepoint("test_default_letter_head")
+		try:
+			frappe.db.set_value("Letter Head", {"name": ["is", "set"]}, "is_default", 0, update_modified=False)
+			install.set_default_letter_head()
+
+			defaults = frappe.get_all(
+				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+			)
+			self.assertEqual(defaults, [install.LETTER_HEAD])
+			self.assertEqual(frappe.db.get_default("letter_head"), install.LETTER_HEAD)
+
+			# A second run - the next migrate - changes nothing.
+			install.set_default_letter_head()
+			defaults = frappe.get_all(
+				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+			)
+			self.assertEqual(defaults, [install.LETTER_HEAD])
+		finally:
+			frappe.db.rollback(save_point="test_default_letter_head")
+			frappe.clear_cache()
+
+	def test_install_and_migrate_both_set_the_default(self):
+		"""An update to the JSON resets is_default on import, so migrate sets
+		it back."""
+		import inspect
+
+		from taxjar_integration import install
+
+		self.assertIn("set_default_letter_head()", inspect.getsource(install.after_install))
+		self.assertIn("set_default_letter_head()", inspect.getsource(install.after_migrate))
+
+	def test_the_file_is_a_standard_letter_head_of_this_app(self):
+		"""Standard and in this app's module, so Frappe imports it on migrate
+		and deletes it when the app is uninstalled. Not the default in the file:
+		set_default_letter_head() decides that on the site."""
+		from taxjar_integration import install
+
+		doc = self._json()
+		self.assertEqual(doc["name"], install.LETTER_HEAD)
+		self.assertEqual(doc["letter_head_name"], install.LETTER_HEAD)
+		self.assertEqual(doc["module"], "TaxJar Integration")
+		self.assertEqual(doc["standard"], "Yes")
+		self.assertEqual(doc["letter_head_for"], "DocType")
+		self.assertEqual(doc["is_default"], 0)
+		self.assertEqual(doc["disabled"], 0)
+
+	def test_the_header_prints_no_document_type_or_number(self):
+		"""Each print format prints its own title and number."""
+		content = self._json()["content"]
+		self.assertNotIn("doc.doctype", content)
+		self.assertNotIn("doc.name", content)
+		self.assertIn("company_logo", content)
+		self.assertIn("company_address", content)
+
+	def test_the_header_renders_the_company_block(self):
+		doc = frappe._dict(doctype="Sales Invoice", name="ACC-SINV-0001", company=None)
+		html = frappe.render_template(self._json()["content"], {"doc": doc})
+		self.assertNotIn("Sales Invoice", html)
+		self.assertNotIn("ACC-SINV-0001", html)
+		self.assertIn("letterhead-container", html)
