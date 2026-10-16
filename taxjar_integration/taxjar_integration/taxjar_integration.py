@@ -12,7 +12,7 @@ import taxjar
 from frappe import _
 from frappe.contacts.doctype.address.address import get_company_address
 from frappe.realtime import get_doctype_room
-from frappe.utils import cint, flt, get_link_to_form
+from frappe.utils import cint, flt, get_link_to_form, getdate, today
 from frappe.utils.caching import request_cache
 from frappe.utils.password import get_decrypted_password
 from taxjar.response import TaxJarResponse
@@ -1631,12 +1631,18 @@ def set_sales_tax(doc, method):
 	# that would serve one company's document a tax result computed through
 	# the other company's TaxJar account.
 	settings_modified = frappe.db.get_single_value("TaxJar Settings", "modified")
-	cache_key = "taxjar_tax:" + hashlib.md5(
+	fingerprint = hashlib.md5(
 		json.dumps(
 			{"tax_dict": tax_dict, "settings_modified": str(settings_modified), "company": doc.company},
 			sort_keys=True, default=str,
 		).encode()
 	).hexdigest()
+
+	if _can_keep_stored_tax(doc, fingerprint, company_config):
+		log_taxjar_call(action="tax_for_order", status="reused", context=_ctx)
+		return
+
+	cache_key = "taxjar_tax:" + fingerprint
 	cached = frappe.cache().get_value(cache_key)
 
 	if cached is not None:
@@ -1677,6 +1683,7 @@ def set_sales_tax(doc, method):
 				doc.get("items")[idx].taxjar_tax_collectable = tc
 
 		_store_breakdown_data(tax_data, doc, usd_rate=usd_rate)
+		_record_tax_calculation(doc, fingerprint)
 
 		# The payload itself, not usd_rate: the line amounts TaxJar answered
 		# about are in tax_dict, already converted, and are what its own
@@ -1971,7 +1978,47 @@ def _remove_taxjar_rows(doc, company_config):
 	doc.run_method("set_total_in_words")
 
 
+def _can_keep_stored_tax(doc, fingerprint, company_config):
+	"""Whether the tax already on the document still answers this request.
+
+	It does when TaxJar would be sent exactly what it was sent before, and it
+	was asked this calendar month. TaxJar prices at the rates of the day it is
+	asked, and rates take effect on the 1st of a month, so an answer from an
+	earlier month may carry a rate that has since changed. The fingerprint
+	travels with the breakdown when a Sales Order is made from a Quotation, so
+	the order keeps the quotation's tax without a second call.
+
+	The TaxJar row must still be on the document. A user can delete it, and a
+	fingerprint with no tax beside it is nothing to keep.
+	"""
+	if getattr(doc, "taxjar_calc_fingerprint", None) != fingerprint:
+		return False
+	calc_date = getattr(doc, "taxjar_calc_date", None)
+	if not calc_date:
+		return False
+	calc_date, current = getdate(calc_date), getdate(today())
+	if (calc_date.year, calc_date.month) != (current.year, current.month):
+		return False
+	return any(
+		tax.account_head == company_config.tax_account_head
+		for tax in (doc.get("taxes") or [])
+	)
+
+
+def _record_tax_calculation(doc, fingerprint):
+	"""Store what the tax on the document was calculated from, and when."""
+	if hasattr(doc, "taxjar_calc_fingerprint"):
+		doc.taxjar_calc_fingerprint = fingerprint
+	if hasattr(doc, "taxjar_calc_date"):
+		doc.taxjar_calc_date = today()
+
+
 def _clear_breakdown_data(doc):
+	# With the tax gone there is nothing for the next save to keep.
+	if hasattr(doc, "taxjar_calc_fingerprint"):
+		doc.taxjar_calc_fingerprint = None
+	if hasattr(doc, "taxjar_calc_date"):
+		doc.taxjar_calc_date = None
 	if hasattr(doc, "taxjar_breakdown_json"):
 		doc.taxjar_breakdown_json = None
 	if hasattr(doc, "taxjar_freight_taxable"):

@@ -721,6 +721,23 @@ _TRANSACTION_BREAKDOWN_FIELDS = [
 		read_only=1,
 		allow_on_submit=1,
 	),
+	# What the stored tax was calculated from, and when. Copied with the rest
+	# of the breakdown when a Sales Order is made from a Quotation, so the new
+	# document can keep the tax instead of asking TaxJar the same question.
+	dict(
+		fieldname="taxjar_calc_fingerprint",
+		fieldtype="Data",
+		insert_after="taxjar_breakdown_html",
+		hidden=1,
+		read_only=1,
+	),
+	dict(
+		fieldname="taxjar_calc_date",
+		fieldtype="Date",
+		insert_after="taxjar_calc_fingerprint",
+		hidden=1,
+		read_only=1,
+	),
 ]
 
 def _item_tax_fields():

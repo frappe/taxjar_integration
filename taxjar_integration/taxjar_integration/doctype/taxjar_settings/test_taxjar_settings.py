@@ -6,7 +6,7 @@ import re
 import unittest
 from datetime import datetime
 
-from unittest.mock import DEFAULT, MagicMock, call, patch
+from unittest.mock import ANY, DEFAULT, MagicMock, call, patch
 
 import frappe
 import taxjar
@@ -181,6 +181,8 @@ class _FakeDoc:
 		self.taxjar_tax_source = None
 		self.taxjar_freight_taxable = 0
 		self.taxjar_breakdown_html = None
+		self.taxjar_calc_fingerprint = None
+		self.taxjar_calc_date = None
 		self._onload = {}
 		self.meta = _FakeMeta()
 
@@ -1734,6 +1736,129 @@ class TestSetSalesTaxCache(UnitTestCase):
 		second_call = self._run(cache, "2026-08-25 10:00:00", company="Company B")
 
 		second_call.assert_called_once()
+
+
+class TestSetSalesTaxKeepsStoredTax(UnitTestCase):
+	"""set_sales_tax keeps the tax already on the document, with no TaxJar call,
+	when the request is the same and the tax was calculated this calendar month.
+
+	One sale used to cost a call on each of Quotation, Sales Order and Sales
+	Invoice, and one on every later save once the five-minute cache expired.
+	The Redis cache is a miss throughout here, so a call not made is the
+	stored tax being kept, not the cache answering.
+	"""
+
+	_MODULE = "taxjar_integration.taxjar_integration.taxjar_integration"
+
+	def _save(self, doc, tax_dict=None, settings_modified="2026-10-01 09:00:00", on="2026-10-16"):
+		tax_data = MagicMock(amount_to_collect=85.0)
+		tax_data.breakdown.line_items = []
+		tax_data.jurisdictions = MagicMock(state="CA", county="", city="")
+
+		def _single_value(doctype, fieldname, *args, **kwargs):
+			return settings_modified if fieldname == "modified" else 1
+
+		with patch(f"{self._MODULE}.frappe.db.get_single_value", side_effect=_single_value), \
+		     patch(f"{self._MODULE}.get_region", return_value="United States"), \
+		     patch(f"{self._MODULE}.get_company_config", return_value=MagicMock(tax_account_head="Sales Tax - TC", shipping_account_head="Freight - TC")), \
+		     patch(f"{self._MODULE}.get_tax_data", return_value=tax_dict or {"to_zip": "90002", "amount": 1000.0}), \
+		     patch(f"{self._MODULE}.check_for_nexus", return_value=True), \
+		     patch(f"{self._MODULE}.validate_tax_request", return_value=tax_data) as mock_validate, \
+		     patch(f"{self._MODULE}.frappe.db.get_value", side_effect=_scalar_get_value(None)), \
+		     patch(f"{self._MODULE}.frappe.cache", return_value=_no_cache()), \
+		     patch(f"{self._MODULE}.today", return_value=on), \
+		     patch(f"{self._MODULE}.capture_once"), \
+		     patch(f"{self._MODULE}.days_since_setup"), \
+		     patch(f"{self._MODULE}.log_taxjar_call") as mock_log:
+			set_sales_tax(doc, None)
+
+		return mock_validate, mock_log
+
+	def _calculated_doc(self):
+		doc = _make_doc(taxes=[])
+		self._save(doc)
+		return doc
+
+	def test_a_second_save_with_nothing_changed_keeps_the_tax(self):
+		doc = self._calculated_doc()
+
+		second_call, log = self._save(doc)
+
+		second_call.assert_not_called()
+		self.assertEqual([t.tax_amount for t in doc.taxes], [85.0])
+		log.assert_called_once_with(action="tax_for_order", status="reused", context=ANY)
+
+	def test_the_calculation_is_recorded_on_the_document(self):
+		doc = self._calculated_doc()
+
+		self.assertTrue(doc.taxjar_calc_fingerprint)
+		self.assertEqual(doc.taxjar_calc_date, "2026-10-16")
+
+	def test_a_changed_request_asks_taxjar_again(self):
+		"""A changed address, item, amount, shipping or exemption all reach
+		TaxJar through the request, so a change to any of them changes it."""
+		doc = self._calculated_doc()
+
+		second_call, _ = self._save(doc, tax_dict={"to_zip": "90002", "amount": 1200.0})
+
+		second_call.assert_called_once()
+
+	def test_a_new_month_asks_taxjar_again(self):
+		"""Rates take effect on the 1st of a month, and TaxJar prices at the
+		rates of the day it is asked."""
+		doc = self._calculated_doc()
+
+		second_call, _ = self._save(doc, on="2026-11-01")
+
+		second_call.assert_called_once()
+		self.assertEqual(doc.taxjar_calc_date, "2026-11-01")
+
+	def test_the_same_day_of_another_year_asks_taxjar_again(self):
+		doc = self._calculated_doc()
+
+		second_call, _ = self._save(doc, on="2027-10-16")
+
+		second_call.assert_called_once()
+
+	def test_saving_taxjar_settings_asks_taxjar_again(self):
+		"""A rotated token or a Sandbox/Live switch must not be hidden by a kept tax."""
+		doc = self._calculated_doc()
+
+		second_call, _ = self._save(doc, settings_modified="2026-10-10 09:00:00")
+
+		second_call.assert_called_once()
+
+	def test_a_deleted_tax_row_asks_taxjar_again(self):
+		doc = self._calculated_doc()
+		doc.taxes = []
+
+		second_call, _ = self._save(doc)
+
+		second_call.assert_called_once()
+		self.assertEqual([t.tax_amount for t in doc.taxes], [85.0])
+
+	def test_a_document_made_from_another_keeps_its_tax(self):
+		"""What ERPNext's mapper hands a Sales Order made from a Quotation:
+		the tax row and the calculation fields, copied across."""
+		quotation = self._calculated_doc()
+		order = _make_doc(taxes=[_TaxRow(account_head="Sales Tax - TC", description="Sales Tax", tax_amount=85.0)])
+		order.taxjar_calc_fingerprint = quotation.taxjar_calc_fingerprint
+		order.taxjar_calc_date = quotation.taxjar_calc_date
+
+		order_call, _ = self._save(order, on="2026-10-28")
+
+		order_call.assert_not_called()
+
+	def test_removing_the_tax_clears_the_calculation(self):
+		"""Without this, a document whose tax was removed - no address, an
+		export, no nexus - would hold a fingerprint for a tax it no longer has."""
+		from taxjar_integration.taxjar_integration.taxjar_integration import _clear_breakdown_data
+
+		doc = self._calculated_doc()
+		_clear_breakdown_data(doc)
+
+		self.assertIsNone(doc.taxjar_calc_fingerprint)
+		self.assertIsNone(doc.taxjar_calc_date)
 
 
 # ── Phase 2: get_line_item_dict — product_tax_code resolution ────────────────
@@ -13001,13 +13126,24 @@ class TestTaxBreakdownCustomFields(UnitTestCase):
 		return captured
 
 	def test_transaction_breakdown_fields_defined(self):
-		self.assertEqual(len(_TRANSACTION_BREAKDOWN_FIELDS), 5)
+		self.assertEqual(len(_TRANSACTION_BREAKDOWN_FIELDS), 7)
 		fieldnames = [f["fieldname"] for f in _TRANSACTION_BREAKDOWN_FIELDS]
 		self.assertIn("taxjar_breakdown_section", fieldnames)
 		self.assertIn("taxjar_breakdown_json", fieldnames)
 		self.assertIn("taxjar_freight_taxable", fieldnames)
 		self.assertIn("taxjar_freight_taxable_html", fieldnames)
 		self.assertIn("taxjar_breakdown_html", fieldnames)
+		self.assertIn("taxjar_calc_fingerprint", fieldnames)
+		self.assertIn("taxjar_calc_date", fieldnames)
+
+	def test_calculation_fields_are_copied_to_the_next_document(self):
+		"""A Sales Order made from a Quotation keeps the quotation's tax only if
+		ERPNext's mapper carries these across, and no_copy would stop it."""
+		for fieldname in ("taxjar_calc_fingerprint", "taxjar_calc_date"):
+			field = next(f for f in _TRANSACTION_BREAKDOWN_FIELDS if f["fieldname"] == fieldname)
+			self.assertFalse(field.get("no_copy"))
+			self.assertEqual(field["hidden"], 1)
+			self.assertEqual(field["read_only"], 1)
 
 	def test_freight_taxable_field_is_hidden_read_only_check(self):
 		field = next(f for f in _TRANSACTION_BREAKDOWN_FIELDS if f["fieldname"] == "taxjar_freight_taxable")

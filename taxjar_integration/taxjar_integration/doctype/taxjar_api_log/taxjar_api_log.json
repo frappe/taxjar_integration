@@ -29,7 +29,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "request\nsuccess\nerror\nskipped",
+   "options": "request\nsuccess\nerror\nskipped\nreused",
    "reqd": 1
   },
   {
@@ -81,7 +81,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-12 00:00:00.000000",
+ "modified": "2026-10-16 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "TaxJar Integration",
  "name": "TaxJar API Log",
