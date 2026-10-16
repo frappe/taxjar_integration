@@ -1988,8 +1988,10 @@ def _can_keep_stored_tax(doc, fingerprint, company_config):
 	travels with the breakdown when a Sales Order is made from a Quotation, so
 	the order keeps the quotation's tax without a second call.
 
-	The TaxJar row must still be on the document. A user can delete it, and a
-	fingerprint with no tax beside it is nothing to keep.
+	The TaxJar row must still be on the document, with the amount TaxJar
+	answered. A user can delete the row or change its amount, and the request
+	does not change with it. A call used to write the calculated amount back on
+	every save, so a kept tax must not keep an edit that the call would undo.
 	"""
 	if getattr(doc, "taxjar_calc_fingerprint", None) != fingerprint:
 		return False
@@ -1999,10 +2001,19 @@ def _can_keep_stored_tax(doc, fingerprint, company_config):
 	calc_date, current = getdate(calc_date), getdate(today())
 	if (calc_date.year, calc_date.month) != (current.year, current.month):
 		return False
-	return any(
-		tax.account_head == company_config.tax_account_head
-		for tax in (doc.get("taxes") or [])
-	)
+
+	rows = [
+		tax for tax in (doc.get("taxes") or [])
+		if tax.account_head == company_config.tax_account_head
+	]
+	calculated = ((_stored_breakdown(doc) or {}).get("totals") or {}).get("amount_to_collect")
+	if not rows or calculated is None:
+		return False
+	precision = rows[0].precision("tax_amount") if hasattr(rows[0], "precision") else 2
+	# Within half of the smallest unit, not flt(x, precision) on both sides:
+	# that reads the rounding method from System Settings, which this check
+	# has no reason to depend on.
+	return abs(sum(flt(tax.tax_amount) for tax in rows) - flt(calculated)) < 0.5 * 10 ** -cint(precision)
 
 
 def _record_tax_calculation(doc, fingerprint):

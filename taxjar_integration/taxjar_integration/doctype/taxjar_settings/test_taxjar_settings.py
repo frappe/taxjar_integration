@@ -1844,10 +1844,40 @@ class TestSetSalesTaxKeepsStoredTax(UnitTestCase):
 		order = _make_doc(taxes=[_TaxRow(account_head="Sales Tax - TC", description="Sales Tax", tax_amount=85.0)])
 		order.taxjar_calc_fingerprint = quotation.taxjar_calc_fingerprint
 		order.taxjar_calc_date = quotation.taxjar_calc_date
+		order.taxjar_breakdown_json = quotation.taxjar_breakdown_json
 
 		order_call, _ = self._save(order, on="2026-10-28")
 
 		order_call.assert_not_called()
+
+	def test_an_edited_tax_amount_asks_taxjar_again(self):
+		"""The request does not change when a user edits the tax row, so the
+		fingerprint alone would keep the edited amount. A call used to write
+		the calculated amount back on every save."""
+		doc = self._calculated_doc()
+		doc.taxes[0].tax_amount = 0.0
+
+		second_call, _ = self._save(doc)
+
+		second_call.assert_called_once()
+		self.assertEqual([t.tax_amount for t in doc.taxes], [85.0])
+
+	def test_a_second_tax_row_on_the_tax_account_asks_taxjar_again(self):
+		doc = self._calculated_doc()
+		doc.taxes.append(_TaxRow(account_head="Sales Tax - TC", description="Manual", tax_amount=10.0))
+
+		second_call, _ = self._save(doc)
+
+		second_call.assert_called_once()
+
+	def test_a_document_with_no_stored_breakdown_asks_taxjar_again(self):
+		"""With no calculated amount to compare, the row cannot be shown to be TaxJar's."""
+		doc = self._calculated_doc()
+		doc.taxjar_breakdown_json = None
+
+		second_call, _ = self._save(doc)
+
+		second_call.assert_called_once()
 
 	def test_removing_the_tax_clears_the_calculation(self):
 		"""Without this, a document whose tax was removed - no address, an
