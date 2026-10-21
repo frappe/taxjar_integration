@@ -6,12 +6,6 @@
 // read/write them directly.
 const EXEMPTION_OPTIONS = ["", "Wholesale", "Government", "Non Exempt", "Other"];
 
-// Where the reader goes to find out what an exemption type means and which
-// regions to pick. The app's own page in the ERPNext manual, not TaxJar's -
-// the words on this card are this integration's, so the explanation of them
-// should be too.
-const TAXJAR_DOC_URL = "https://docs.frappe.io/erpnext/taxjar_integration";
-
 // How many region chips a country shows before the rest go behind one control.
 // Matches REGIONS_SHOWN on the Nexus page, which solves the same problem in
 // the same shape - two rows of chips in a card at this width.
@@ -204,11 +198,6 @@ function render_exemption_summary(frm) {
 						// says a row is about to be added to a list.
 						icon: "settings",
 						css_class: "taxjar-manage-exemption-btn",
-					},
-					{
-						label: __("Documentation"),
-						href: TAXJAR_DOC_URL,
-						icon: "external-link",
 					},
 				],
 			})

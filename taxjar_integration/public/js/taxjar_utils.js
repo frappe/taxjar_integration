@@ -12,22 +12,6 @@ if (!window.taxjar_integration) {
 // their cause varies per message, so naming one card would be a guess.
 const TAXJAR_SETUP_FEATURES_URL = "/app/taxjar-setup?focus=features";
 
-// ── The roles documentation link ──
-// A permission refusal ends with "Read documentation", which links here (see
-// ROLES_DOCS_URL in access.py, the same URL). Frappe cleans the HTML of every
-// message it shows, and the cleaning keeps href but drops target, so this one
-// link is opened in a new tab here. Every other link stays with the desk. The
-// handler is named, so loading this file again replaces it rather than adding a
-// second one.
-taxjar_integration.ROLES_DOCS_URL = "https://docs.example.com/taxjar/roles-and-permissions";
-
-$(document)
-	.off("click.taxjar_roles_docs")
-	.on("click.taxjar_roles_docs", `a[href^="${taxjar_integration.ROLES_DOCS_URL}"]`, function (event) {
-		event.preventDefault();
-		window.open(this.href, "_blank", "noopener,noreferrer");
-	});
-
 // ── Shared geography constants ──
 // Single source of truth for US state + Canadian province codes used across the
 // Address and Customer forms and the TaxJar Customers configuration page.

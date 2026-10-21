@@ -15,7 +15,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { install_desk, load_customer_form, load_taxjar_utils } from "./helpers/desk.js";
 
-const DOC_URL = "https://docs.frappe.io/erpnext/taxjar_integration";
 // Mirrors REGIONS_SHOWN in customer.js. Stated here rather than imported: the
 // file is a browser script, and a test that reads the cap from the code it is
 // testing cannot notice the cap changing.
@@ -163,12 +162,9 @@ describe("no exemption configured yet", () => {
 		expect(empty_state_opts.icon).toBeTruthy();
 	});
 
-	it("offers exactly two actions", () => {
+	it("offers only Manage Exemption", () => {
 		render();
-		expect(empty_state_opts.actions.map((a) => a.label)).toEqual([
-			"Manage Exemption",
-			"Documentation",
-		]);
+		expect(empty_state_opts.actions.map((a) => a.label)).toEqual(["Manage Exemption"]);
 	});
 
 	it("keeps Manage Exemption a subtle button", () => {
@@ -177,13 +173,6 @@ describe("no exemption configured yet", () => {
 		expect(manage.variant).toBe("subtle");
 		// No href: it opens the dialog rather than navigating anywhere.
 		expect(manage.href).toBeUndefined();
-	});
-
-	it("leaves Documentation a link, not a second button", () => {
-		render();
-		const docs = empty_state_opts.actions[1];
-		expect(docs.href).toBe(DOC_URL);
-		expect(docs.variant).toBeUndefined();
 	});
 
 	it("opens the dialog from the empty state's own button", () => {

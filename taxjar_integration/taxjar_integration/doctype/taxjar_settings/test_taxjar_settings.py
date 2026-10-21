@@ -10707,24 +10707,18 @@ class TestCustomerClientScriptUpdated(UnitTestCase):
 
 	def test_the_empty_state_leads_with_manage_exemption(self):
 		"""Manage Exemption is a subtle button, not a solid one - the empty
-		state stays quiet. The docs link beside it stays a link."""
+		state stays quiet."""
 		js = self._read_js()
 		summary_fn = js.split("function render_exemption_summary(frm) {")[1].split("\nfunction ")[0]
 		manage = summary_fn.split('label: __("Manage Exemption")')[1].split("},")[0]
 		self.assertIn('variant: "subtle"', manage)
 		self.assertIn("taxjar-manage-exemption-btn", manage)
 
-	def test_the_empty_state_links_to_the_manual(self):
+	def test_the_empty_state_has_no_docs_link(self):
 		js = self._read_js()
 		summary_fn = js.split("function render_exemption_summary(frm) {")[1].split("\nfunction ")[0]
-		docs = summary_fn.split('label: __("Documentation")')[1].split("},")[0]
-		self.assertIn("href: TAXJAR_DOC_URL", docs)
-		self.assertIn('icon: "external-link"', docs)
-		# The app's own page in the ERPNext manual, not TaxJar's site.
-		self.assertIn(
-			'const TAXJAR_DOC_URL = "https://docs.frappe.io/erpnext/taxjar_integration";',
-			self._read_js(),
-		)
+		self.assertNotIn('label: __("Documentation")', summary_fn)
+		self.assertNotIn("TAXJAR_DOC_URL", js)
 
 	def test_a_configured_exemption_gets_the_app_s_own_card(self):
 		"""Not frappe's .address-box any more: this card holds a header and a
@@ -25213,15 +25207,14 @@ class TestWorkspaceRoles(UnitTestCase):
 		self.assertEqual(list(install.WORKSPACE_ROLES), shipped)
 
 
-# ── A permission refusal links to the roles documentation ────────────────────
+# ── A permission refusal names the missing right ─────────────────────────────
 
 
-class TestPermissionRefusalLinksTheDocs(UnitTestCase):
+class TestPermissionRefusal(UnitTestCase):
 	"""Every permission check in the app goes through require_permission(), so
-	a refusal says which right is missing and links to the task table that
-	lists the rights for each TaxJar task."""
+	a refusal says which right is missing."""
 
-	def test_a_refusal_names_the_right_and_links_the_task_table(self):
+	def test_a_refusal_names_the_right_without_a_docs_link(self):
 		from taxjar_integration.taxjar_integration import access
 
 		with patch.object(access.frappe, "has_permission", return_value=False):
@@ -25231,11 +25224,9 @@ class TestPermissionRefusalLinksTheDocs(UnitTestCase):
 		message = str(ctx.exception)
 		self.assertIn("Customer", message)
 		self.assertIn("write", message)
-		self.assertIn(f'href="{access.ROLES_DOCS_URL}#{access.TASK_TABLE_ANCHOR}"', message)
 		self.assertIn("ask your administrator to update permissions for your user.", message)
-		# A blank line, then the link on a line of its own, with the arrow in it.
-		self.assertIn("for your user.<br><br><a ", message)
-		self.assertIn("Read documentation &rarr;</a>", message)
+		self.assertNotIn("<a ", message)
+		self.assertNotIn("Read documentation", message)
 
 	def test_a_user_with_the_right_passes(self):
 		from taxjar_integration.taxjar_integration import access
@@ -25245,29 +25236,9 @@ class TestPermissionRefusalLinksTheDocs(UnitTestCase):
 
 		has_permission.assert_called_once_with("Customer", "write", doc="CUST-0001")
 
-	def test_the_desk_script_knows_the_same_docs_url(self):
-		"""Two copies of one fact: the URL in the refusal, and the URL the desk
-		script opens in a new tab. Frappe drops target from message links."""
-		import os
-		import re
-
-		from taxjar_integration.taxjar_integration import access
-
-		path = os.path.join(frappe.get_app_path("taxjar_integration"), "public", "js", "taxjar_utils.js")
-		with open(path) as handle:
-			match = re.search(r'taxjar_integration\.ROLES_DOCS_URL = "([^"]+)";', handle.read())
-		self.assertIsNotNone(match, "taxjar_utils.js no longer sets taxjar_integration.ROLES_DOCS_URL")
-		self.assertEqual(match.group(1), access.ROLES_DOCS_URL)
-
-	def test_the_anchor_is_the_task_table_heading(self):
-		"""The heading in docs/taxjar/09-roles-and-permissions.md, as a slug."""
-		from taxjar_integration.taxjar_integration import access
-
-		self.assertEqual(access.TASK_TABLE_ANCHOR, "taxjar-tasks-and-the-rights-they-need")
-
 	def test_no_check_throws_frappes_own_message(self):
 		"""frappe.has_permission(..., throw=True) raises with Frappe's text, which
-		has no link. A check written that way would skip the docs."""
+		does not name the missing right or tell the user to ask an administrator."""
 		import os
 
 		root = os.path.dirname(frappe.get_module_path("taxjar_integration"))
