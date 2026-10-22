@@ -1,2 +1,2 @@
-# frappe -- https://github.com/frappe/frappe is installed via 'bench init'
-taxjar~=1.9.2
+# Runtime dependencies are declared in pyproject.toml ([project.dependencies]).
+# This file is kept for compatibility with older tooling.

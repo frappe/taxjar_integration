@@ -1,0 +1,67 @@
+/* Shared page chrome (data table, summary strip, bulk action button) lives in
+   public/scss/taxjar_integration.bundle.scss. Only what is specific to this
+   page stays here. */
+
+.taxjar-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	padding: 15px 15px 0;
+}
+
+.taxjar-filters .frappe-control {
+	width: 180px;
+}
+
+/* Sync Status column popover trigger. Failed pairs the pill with a separate
+   small info icon (never nested inside the pill) carrying the error; Synced
+   has no icon and the pill itself is the trigger, since its own text already
+   covers the status and the popover only adds the last-synced time. Queued
+   and Excluded have no popover at all - the pill says everything.
+   cursor: pointer, not help - "help" makes the browser draw its own
+   question-mark cursor glyph next to the pointer, which reads as a stray
+   "?" floating over the trigger. */
+.taxjar-sync-trigger {
+	cursor: pointer;
+}
+
+.taxjar-sync-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	margin-left: 6px;
+	padding: 0;
+	border: none;
+	background: none;
+	color: var(--text-muted);
+	vertical-align: middle;
+}
+
+.taxjar-sync-icon:hover {
+	color: var(--text-color);
+}
+
+/* Appended to <body>, not the table's own wrapper - deliberately outside its
+   scoping so it isn't clipped by the table/card's overflow, and
+   position: fixed so its coordinates (from getBoundingClientRect(), viewport-
+   relative) don't need scroll-offset math. Shown on hover AND click (see
+   _show_sync_popover) rather than the native title attribute, which both
+   enforces its own show delay and never responds to a click at all. Kept as
+   its own hand-rolled popover (not frappe.ui.popover) deliberately - it has
+   to survive frappe.DataTable's own row virtualization, which can recycle or
+   redraw the underlying cell at any time, and a real Popover instance is
+   bound to one specific trigger element rather than re-attachable like this
+   delegated listener is. */
+.taxjar-sync-pop {
+	position: fixed;
+	z-index: 1000;
+	max-width: 280px;
+	padding: 8px 12px;
+	border-radius: var(--radius-md);
+	background: var(--fg-color);
+	border: 1px solid var(--border-color);
+	box-shadow: var(--shadow-md);
+	font-size: var(--text-sm);
+	color: var(--text-color);
+}

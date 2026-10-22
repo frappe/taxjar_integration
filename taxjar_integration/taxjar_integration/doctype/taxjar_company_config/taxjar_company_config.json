@@ -1,0 +1,84 @@
+{
+ "actions": [],
+ "creation": "2026-06-09 00:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "tax_account_head",
+  "shipping_account_head",
+  "taxjar_calculate_tax",
+  "taxjar_create_transactions",
+  "taxjar_include_exports"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Auto-computes sales taxes based on nexus while saving Quotation, Sales Order, Sales Invoice.",
+   "fieldname": "taxjar_calculate_tax",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Calculate Sales Tax"
+  },
+  {
+   "default": "0",
+   "description": "Sales Invoices are synced for tax return filing using TaxJar <a href=\"https://support.taxjar.com/article/908-how-does-autofile-work\" target=\"_blank\" rel=\"noopener noreferrer\">AutoFile</a>.",
+   "fieldname": "taxjar_create_transactions",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Sync Transactions"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.taxjar_create_transactions",
+   "description": "Sync zero rated export transactions to TaxJar.",
+   "fieldname": "taxjar_include_exports",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Include Export Transactions"
+  },
+  {
+   "description": "Sales Tax Ledger where the tax liability will accumulate",
+   "fieldname": "tax_account_head",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Tax Account Head",
+   "options": "Account",
+   "reqd": 1,
+   "link_filters": "[[\"Account\",\"company\",\"=\",\"eval:doc.company\"],[\"Account\",\"is_group\",\"=\",0]]"
+  },
+  {
+   "description": "Ledger for booking shipping charges to customers",
+   "fieldname": "shipping_account_head",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shipping Account Head",
+   "options": "Account",
+   "reqd": 1,
+   "link_filters": "[[\"Account\",\"company\",\"=\",\"eval:doc.company\"],[\"Account\",\"is_group\",\"=\",0]]"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-16 12:25:04.020147",
+ "modified_by": "Administrator",
+ "module": "TaxJar Integration",
+ "name": "TaxJar Company Config",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

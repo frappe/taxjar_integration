@@ -1,0 +1,23 @@
+{
+ "creation": "2026-07-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "settings",
+ "idx": 0,
+ "modified": "2026-07-14 10:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "TaxJar Integration",
+ "name": "taxjar-setup",
+ "owner": "Administrator",
+ "page_name": "taxjar-setup",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Accounts Manager"
+  }
+ ],
+ "standard": "Yes",
+ "title": "TaxJar Setup"
+}

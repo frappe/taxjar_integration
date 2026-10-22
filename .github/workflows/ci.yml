@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -12,12 +11,94 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The desk scripts decide what TaxJar does for a company on the form itself,
+  # and until this job existed a green server suite said nothing about them -
+  # which is how a company registered outside the United States came to be
+  # asked for a shipping address. Runs on its own: no site, no database, so it
+  # answers in seconds and fails for one reason only.
+  client:
+    runs-on: ubuntu-latest
+    name: Client
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      # 24, the same major the server job uses, because frappe's package.json
+      # sets engines.node to >=24 on both develop and version-16. This job
+      # builds nothing of frappe and vitest 3 would run on 20.19 upward, so
+      # the floor here is a choice: one major across the file is one thing to
+      # move when frappe raises the floor again.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Run client tests
+        run: npm test
+
+  semgrep:
+    runs-on: ubuntu-latest
+    name: Static Analysis
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install semgrep
+        run: pip install semgrep
+
+      # frappe/semgrep-rules carries the framework-specific rules this app is
+      # held to: enqueue-without-after-commit, raw frappe.db.sql, explicit
+      # commits, single-value type safety. Blocking, and currently at zero -
+      # the two suppressions in the tree are inline `# nosemgrep` pragmas with
+      # a stated reason, so they show up in review rather than disappearing
+      # into a config file.
+      #
+      # Deliberately not also running the registry's generic `r/python`: it
+      # reports ~77 style findings, almost all `unspecified-open-encoding` in
+      # the test file, which would have to stay non-blocking and would bury
+      # the rules that matter.
+      - name: Clone frappe semgrep rules
+        run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git /tmp/frappe-semgrep-rules
+
+      - name: Run semgrep
+        run: |
+          semgrep --config /tmp/frappe-semgrep-rules/rules \
+                  --exclude '*/node_modules/*' \
+                  --exclude '*/dist/*' \
+                  --metrics off \
+                  --error \
+                  taxjar_integration
+
+      # App-local conventions semgrep's rules do not cover: that every
+      # patch() in the suite still names a symbol the module under test
+      # actually uses, that every frappe.throw() carries a title, and that
+      # every frappe.enqueue() defers to commit. Each of these is a rule a
+      # one-time sweep fixes and then quietly loses; see the module docstring.
+      - name: Run app convention checks
+        run: python scripts/audit_conventions.py
+
   tests:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
     name: Server
 
+    # bench init writes redis_queue at port 11000 and redis_cache at 13000
+    # into common_site_config.json, and --skip-redis-config-generation means
+    # the bench never starts a redis of its own. ERPNext's install enqueues
+    # background jobs, so without these two the install died with
+    # "Connection refused" on 11000. redis_socketio shares 13000.
     services:
       mariadb:
         image: mariadb:10.6
@@ -27,35 +108,58 @@ jobs:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=2s --health-retries=3
+
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=2s --health-retries=3
+
     steps:
       - name: Clone
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
+      # 3.14, because this job builds frappe: its pyproject pins
+      # requires-python to >=3.14,<3.15 on both develop and version-16, and
+      # frappe/__init__.py uses PEP 695 `type` aliases that no interpreter
+      # below 3.12 can even parse. On 3.11 the editable install of frappe
+      # died with a SyntaxError and bench init exited 167, so the suite never
+      # ran. The Static Analysis job stays on 3.11 on purpose: it installs
+      # semgrep alone and never builds frappe.
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.14'
 
+      # 24, because this job runs `bench build` over frappe's assets and
+      # frappe's package.json sets engines.node to >=24. The job ran 20 until
+      # now, four majors below that floor; the Python failure in the step
+      # above hid it, because `bench build` never started.
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
-          node-version: 14
+          node-version: 24
           check-latest: true
 
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt', '**/pyproject.toml', '**/setup.cfg') }}
           restore-keys: |
             ${{ runner.os }}-pip-
             ${{ runner.os }}-
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: 'echo "::set-output name=dir::$(yarn cache dir)"'
+        run: 'echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT'
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -70,12 +174,20 @@ jobs:
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
+      # ERPNext comes first because hooks.py names it in required_apps, and
+      # the app reads erpnext for get_region, get_exchange_rate and the
+      # company defaults. Without it, install-app stopped with "No module
+      # named 'erpnext'". --skip-assets leaves the asset build to the single
+      # `bench build` below, rather than running it twice. --branch develop
+      # matches the frappe that bench init cloned.
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
+          bench get-app --branch develop --skip-assets erpnext
           bench get-app taxjar_integration $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
+          bench --site test_site install-app erpnext
           bench --site test_site install-app taxjar_integration
           bench build
         env:

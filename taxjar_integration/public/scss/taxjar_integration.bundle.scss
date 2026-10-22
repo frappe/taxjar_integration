@@ -1,0 +1,761 @@
+// Shared desk styles for the TaxJar pages (Transaction Sync, Customer
+// Configuration). Loaded on every desk page via app_include_css in hooks.py.
+//
+// Everything here styles the components in public/js/components. Page-specific
+// rules stay in the page's own css file.
+
+// ── Data table ────────────────────────────────────────────────────────────
+// frappe.DataTable ships its own layout; these only fix the two things that
+// look wrong inside a full-width desk page.
+
+.taxjar-datatable {
+	--dt-row-height: 34px;
+
+	width: 100%;
+	// Breathing room on all four sides - the table sitting flush against the
+	// tab row above and the paginator below read as one undifferentiated block.
+	padding: 12px 15px 15px;
+
+	.datatable {
+		width: 100%;
+
+		// The table paginates instead of scrolling inside itself, but the height
+		// is NOT dropped here. Rows are drawn by HyperList, which takes this
+		// element's computed height as its viewport - an auto height computes
+		// to 0px and the table renders empty. DataTableManager.fit_height()
+		// sets an exact pixel height from the row count instead, which leaves
+		// nothing to scroll while still giving HyperList a real number.
+		.dt-scrollable {
+			overflow-y: hidden;
+			// The fluid layout writes overflowX: hidden straight onto this
+			// element (style.js:368-372), which would trap the columns with no
+			// way to reach them on a narrow window. An inline style only loses
+			// to !important, hence this.
+			overflow-x: auto !important;
+			// setBodyStyle() pins this to the row's own width + 10px whenever the
+			// row is narrower than the container (style.js:322-331), while the
+			// header spans the container. Under the fluid layout the row is
+			// always a few pixels short - distributeRemainingWidth() takes 2px
+			// off every column - so the header ends up visibly wider than the
+			// body beneath it. Also an inline style, so also !important.
+			width: 100% !important;
+		}
+
+		// Only header cells close themselves off on the right
+		// (.dt-cell--header:last-child in the library's stylesheet), so without
+		// this the header row is literally 1px wider than every body row.
+		.dt-row .dt-cell:last-child {
+			border-right: 1px solid var(--dt-border-color);
+		}
+
+		// let a row grow to fit wrapped content, but pin the filter row so it
+		// cannot stretch with it
+		.dt-row {
+			height: unset;
+		}
+
+		.dt-row-filter {
+			height: var(--dt-row-height);
+
+			.dt-cell {
+				max-height: var(--dt-row-height);
+			}
+		}
+	}
+}
+
+// ── Summary strip ─────────────────────────────────────────────────────────
+
+.taxjar-summary-strip {
+	display: flex;
+	align-items: stretch;
+	border-bottom: 1px solid var(--border-color);
+	// The whole strip is one row. frappe's .report-summary is built for a
+	// handful of wide cards and gives each a 160px minimum plus 20px margins -
+	// six of those need well over 1200px and wrap onto a second line long
+	// before that. These are small counts, so they are sized to their content
+	// instead (see .summary-item below).
+	flex-wrap: nowrap;
+	overflow-x: auto;
+
+	.taxjar-summary-group {
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-start;
+		padding: 16px 0 20px;
+	}
+
+	// flex-grow is set per group in summary_strip.js, weighted by how many
+	// numbers the group holds - a shared value here would hand a one-card group
+	// the same slice as a five-card one.
+	.taxjar-summary-group {
+		flex: 0 1 auto;
+	}
+
+	// the divider between groups - same 1px weight as the rules inside a group,
+	// since the heading above each one already marks the boundary
+	.taxjar-summary-group + .taxjar-summary-group {
+		border-left: 1px solid var(--border-color);
+	}
+
+	// The group heading has to read as a heading, not as another card label -
+	// they sit two lines apart and would otherwise look like the same rank.
+	.taxjar-summary-group-label {
+		text-align: center;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		// A rule across the group, so the heading reads as a header over the
+		// counts rather than as another line of text stacked above them.
+		border-bottom: 1px solid var(--border-color);
+		padding-bottom: 8px;
+		margin-bottom: 12px;
+	}
+
+	// Separates a total from the statuses it breaks down into. Lighter than the
+	// rule between groups, which is a stronger boundary.
+	.taxjar-summary-divider {
+		width: 1px;
+		align-self: stretch;
+		margin: 0 4px;
+		background: var(--border-color);
+	}
+
+	// = and + between the counts. Quieter than the numbers themselves - it is
+	// punctuation, not data - and narrow so the operators do not take the room
+	// the figures need.
+	//
+	// The divider sits on the operator's leading edge rather than between every
+	// pair of elements, so each segment reads as one thing - "= Synced",
+	// "+ Queued" - instead of boxing the operators off in cells of their own.
+	.taxjar-summary-operator {
+		padding: 0 14px;
+		flex: 0 0 auto;
+		border-left: 1px solid var(--border-color);
+
+		.summary-value {
+			color: var(--text-light, var(--text-muted));
+			font-weight: 400;
+		}
+	}
+
+	// frappe's .report-summary is built for a handful of wide cards: it wraps,
+	// and gives each item a 160px minimum plus 20px margins either side. Five
+	// counts then demand over 1000px and "Excluded" drops to a second line.
+	// These are short numbers, so they are sized to their content and the group
+	// stays on one row.
+	.report-summary {
+		border-bottom: 0;
+		margin: 0;
+		padding: 0;
+		gap: 0;
+		flex-wrap: nowrap;
+		justify-content: space-around;
+	}
+
+	// Equal-width cells. Left content-sized with space-around, the gaps fall
+	// wherever the text happens to end, so the dividers and the figures drift
+	// out of line - the first card's number sat well left of its own cell.
+	.summary-item {
+		flex: 1 1 0;
+		min-width: 0;
+		max-width: none;
+		margin: 0;
+		padding: 0 14px;
+	}
+
+	// Keeps neighbouring counts visibly separate. Only between two adjacent
+	// cards - a card following a .taxjar-summary-divider already has one.
+	.summary-item + .summary-item {
+		border-left: 1px solid var(--border-color);
+	}
+
+	// frappe centres the label but not the value, so the number would sit left
+	// of the word above it.
+	.summary-value {
+		text-align: center;
+	}
+}
+
+// The whole card is the click target. No underline and no background - the row
+// is a dense line of figures, and decorating each one competes with the numbers
+// themselves - so the number's own colour deepens instead. That reads as
+// "clickable" without adding any furniture to the strip, and unlike the pointer
+// cursor it is visible from the moment the pointer crosses the card.
+.taxjar-summary-clickable {
+	cursor: pointer;
+
+	.summary-value {
+		transition: color 100ms ease-in-out;
+	}
+
+	// Resting tones are frappe's own (.summary-value.green etc. in
+	// desk/report.scss, all -500), so the strip still matches every other
+	// report summary in the desk; only the hover step is ours.
+	&:hover .summary-value {
+		color: var(--heading-color);
+
+		&.green {
+			color: var(--green-700);
+		}
+
+		&.blue {
+			color: var(--blue-700);
+		}
+
+		&.red {
+			color: var(--red-700);
+		}
+	}
+
+	&:focus-visible {
+		outline: 1px solid var(--primary);
+		outline-offset: -2px;
+	}
+
+	// The drilled-down card stays bold, so it is still visible why the table
+	// below is showing a subset.
+	&[aria-pressed="true"] .summary-value {
+		font-weight: 800;
+	}
+}
+
+// The dark palette shifts the whole scale darker rather than inverting it
+// (--green-500 is #43ac79 in light and #117846 in dark), so going deeper there
+// would mean less contrast against the page, not more. The hover step goes the
+// other way instead; the neutral value needs no such flip, since
+// --heading-color follows the theme on its own.
+[data-theme="dark"] .taxjar-summary-clickable:hover .summary-value {
+	&.green {
+		color: var(--green-300);
+	}
+
+	&.blue {
+		color: var(--blue-300);
+	}
+
+	&.red {
+		color: var(--red-300);
+	}
+}
+
+// ── Disabled page buttons ─────────────────────────────────────────────────
+// Disabled look without pointer-events: none - the title has to survive, and
+// so does tab focus. See bulk_action_button.js and export_button.js.
+
+.es-button.taxjar-bulk-action[data-disabled],
+.es-button.taxjar-export[data-disabled] {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+// ── Tab row ───────────────────────────────────────────────────────────────
+// frappe.ui.tabs draws the tab bar itself (.es-tabs__list, already styled by
+// its own component CSS); only the left inset - lining the labels up with
+// the table's own padding below them - the group rule, and the tab actions
+// row need anything here.
+
+.taxjar-page-tabs {
+	.es-tabs__list {
+		padding-left: 15px;
+	}
+
+	// The summary strip above divides its numbers into three captioned groups
+	// - the total, In Scope, Out of Scope - with a rule at each seam. This
+	// repeats those rules under it, so the two rows read as one grid.
+	// The rule is drawn in the gap by a pseudo-element and the space made with
+	// margin, because the component sizes the active underline from the
+	// button's own offsetWidth - a border and padding here would stretch that
+	// underline past the label it belongs to. The colour is the tab rail's, so
+	// the two lines meeting at the corner are one weight.
+	.es-tabs__tab.taxjar-tab-group-start {
+		position: relative;
+		margin-left: calc(var(--spacing) * 5);
+
+		&::before {
+			content: "";
+			position: absolute;
+			left: calc(var(--spacing) * -5);
+			top: calc(var(--spacing) * 1);
+			bottom: calc(var(--spacing) * 1);
+			border-left: 1px solid var(--outline-gray-1);
+		}
+	}
+
+	// Sits inside the table wrapper, directly above the rows it acts on, so it
+	// picks up that wrapper's padding rather than needing its own.
+	.taxjar-tab-actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 12px;
+		margin-bottom: 10px;
+	}
+
+	// The selection's own controls, the pair the Transaction Sync page hides on
+	// a tab that offers no selection. Grouped so that hiding them leaves the row
+	// and the Export button in it standing.
+	.taxjar-selection-actions {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.taxjar-selection-count {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+}
+
+// ── Paginator ─────────────────────────────────────────────────────────────
+
+.taxjar-paginator {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	// Horizontal inset comes from the .taxjar-datatable wrapper this now sits
+	// inside (both pages share it) - repeating it here would double it and
+	// push the controls off the table's right edge. Only the gap below the
+	// rows is set here.
+	padding: 14px 0 0;
+
+	// The page size picker is the espresso segmented group (.es-tab-buttons),
+	// which carries its own rail, pill, ink and dark theme. It was a bootstrap
+	// .btn-group copied from the list view, and the rules that made that look
+	// like the desk around it stood here.
+
+	// One row: the count, then the two steps. It used to stack, with the count
+	// above a row of numbered buttons - the numbers are gone, so the words and
+	// the arrows share a line and the control is half as tall.
+	.taxjar-paginator-nav {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-left: auto;
+	}
+
+	.taxjar-paginator-status {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.taxjar-paginator-pages {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+}
+
+// ── Region hover card ─────────────────────────────────────────────────────
+// The card taxjar_integration.region_hover_card builds, opened from a region
+// count on the Customer Configuration page and on the guided setup's Nexus
+// card. It lives here rather than in either page's own css file because
+// frappe.ui.hover_card appends the card to the body, outside both wrappers.
+//
+// Sections stack: heading, then the names it covers. The card sizes to its
+// content, so a long list wraps rather than running off the viewport.
+.taxjar-regions-card {
+	max-width: 260px;
+	font-size: var(--text-sm);
+
+	.taxjar-regions-card-heading {
+		font-weight: var(--font-weight-semibold);
+		color: var(--heading-color);
+		// The country's flag sits on the same line as its name.
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.taxjar-regions-card-body {
+		color: var(--text-muted);
+		margin-bottom: 8px;
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
+}
+
+// ── Customer exemption card ───────────────────────────────────────────────
+// The card render_exemption_summary draws once an exemption exists. Not
+// frappe's .address-box: this holds more than an address does - a header, then
+// a band per country - so it needs rules between those bands, and padding on
+// each band rather than one padding around the lot. Every colour, radius and
+// space below is still a desk token, so it sits beside frappe's own cards in
+// the same form without looking foreign.
+//
+// frappe builds an input control with bootstrap's .form-group class, and with
+// it the 1rem gap that holds one field off the next. It builds an HTML control
+// from the base class instead, which carries .frappe-control alone - so this
+// field ended flush against the rule that closes its section, with no space
+// after the card at all.
+//
+// The gap belongs to the field, not to the card: the empty state stands in the
+// same wrapper and needs the same space under it.
+.frappe-control[data-fieldname="taxjar_exemption_summary_html"] {
+	margin-bottom: 1rem;
+}
+
+// Capped rather than halved, so the card keeps its width on a narrow screen
+// instead of shrinking with the viewport. The section around it is full width
+// for the empty state, which needs the room for its centred actions.
+.taxjar-exemption-card {
+	max-width: 28rem;
+	background-color: var(--card-bg);
+	border: 1px solid var(--border-color);
+	border-radius: var(--radius);
+	// So a rule at the top of a band cannot cross the rounded corner.
+	overflow: hidden;
+
+	// One rule between bands, never above the first or below the last.
+	> * + * {
+		border-top: 1px solid var(--border-color);
+	}
+
+	// 12px, not --padding-md's 15px. The card stacks four bands, so that
+	// padding counts eight times down the card - and it set the regions in a
+	// band further from their own country name than the bands sit apart.
+	.taxjar-exemption-row {
+		padding: calc(var(--spacing) * 3);
+	}
+
+	// Flag, country name, and the count pushed to the far end of the same line.
+	.taxjar-exemption-country {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.taxjar-exemption-count {
+		margin-inline-start: auto;
+		white-space: nowrap;
+	}
+
+	// Indented to the country name above it - the flag's width and the gap
+	// after it - so the eye reads one left edge down the band, not two.
+	.taxjar-exemption-detail {
+		margin-top: 6px;
+		padding-inline-start: 24px;
+	}
+
+	// Rows sit closer than the chips within a row: a chip that wraps belongs
+	// to the list above it, and the wider space is what holds one chip apart
+	// from the next.
+	.taxjar-region-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 6px;
+	}
+
+	// The chip sets its own height from its padding, as the Nexus page's own
+	// region chip does - the badge's fixed height crops a two-line name.
+	.taxjar-region-chip.es-badge {
+		height: auto;
+		padding: 3px 9px;
+	}
+
+	// The line the control sits on: a flex item as wide as the row, so the
+	// chips above it break before it and it takes the whole line. The control
+	// inside keeps its own width.
+	.taxjar-region-more-line {
+		flex-basis: 100%;
+	}
+
+	// The control that closes the row, as words rather than as a shape: the
+	// espresso button with its box taken off, at the chip's type size and the
+	// chip's ink, with a dotted rule under the text. The chips are the data
+	// and this is the one action among them, so it carries no pill and no icon
+	// - a pill read as one more region, and a chevron beside two words said
+	// what the words say.
+	//
+	// The ink is the deepening: grey at rest, the chip's own step, so the
+	// action sits with the regions it counts rather than over them. Then a
+	// step deeper on hover, on the words and on the rule together, which is
+	// what answers the pointer. The button's own hover fill would put the box
+	// back, so it goes. The focus ring stays, and it is what answers a
+	// keyboard.
+	.taxjar-region-more.es-button {
+		height: auto;
+		// The padding holds the ring clear of the words.
+		//
+		// The words then start where the words in the chips above them start:
+		// the chip's own 9px of padding, less this button's 4px. Set against
+		// the pill's outer edge instead, the control lined up with the country
+		// name above the list and read as a line under it, rather than as the
+		// end of the list itself. A pill is a shape, but this control is
+		// words, and words line up with words.
+		padding: 2px 4px;
+		margin-inline-start: 5px;
+		color: var(--ink-gray-6);
+		// The button's own two fills, set to nothing: a fill on hover or on
+		// press would put the box back around the words. The ink below is what
+		// answers the pointer instead, and the focus ring is what answers a
+		// keyboard.
+		--bt-fill-bg-hover: transparent;
+		--bt-fill-bg-active: transparent;
+
+		&:hover {
+			color: var(--ink-gray-8);
+		}
+
+		// The rule sits on the label rather than on the button, so it runs
+		// under the words and not under the padding around them.
+		//
+		// Dotted, and painted as a background rather than as
+		// text-decoration: underline. It is the rule the Nexus page's own
+		// count draws (.taxjar-nexus-count), so the app marks the things it
+		// opens in the one way. A background also paints once for the whole
+		// box, which keeps the dots even.
+		//
+		// Padding on the label moves the background clear of the descenders
+		// without moving the words off their line.
+		.es-button__label {
+			// One step under the words, not the lighter step an edge takes:
+			// the rule is what says the words can be pressed, so it has to
+			// read at 13px.
+			--taxjar-more-rule: var(--ink-gray-5);
+			background-image: repeating-linear-gradient(
+				to right,
+				var(--taxjar-more-rule) 0 1px,
+				transparent 1px 3px
+			);
+			background-size: 100% 1px;
+			background-repeat: no-repeat;
+			background-position: left bottom;
+			padding-bottom: 2px;
+		}
+
+		&:hover .es-button__label {
+			--taxjar-more-rule: var(--ink-gray-8);
+		}
+	}
+}
+
+// The header is the one band laid out as a row, so the pencil can sit at its
+// far end. frappe's .card-menu-btn would pin it to the card's top-right corner
+// instead, which is half a band away from the line it belongs to.
+.taxjar-exemption-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+
+	.taxjar-exemption-edit {
+		margin-inline-start: auto;
+	}
+}
+
+// ── Country flag ──────────────────────────────────────────────────────────
+// The chip taxjar_integration.country_flag_html draws its SVG into. The shape
+// lives here rather than in the SVG so it is one rule to change, and so the
+// rounded corner needs no <clipPath> - an id inside markup that renders twice
+// on a page collides with itself.
+.taxjar-flag {
+	display: inline-block;
+	// Never squeezed by a long country name beside it in a flex row.
+	flex: none;
+	// 4:3, the same ratio both flags are authored at, sized to sit on a line
+	// of the 12-13px text it labels rather than to tower over it.
+	width: 16px;
+	height: 12px;
+	border-radius: 2px;
+	overflow: hidden;
+	// Both flags reach their own edge in white, so without an edge of its own
+	// the chip bleeds into the card behind it.
+	//
+	// A ring outside the box, not `inset` and not a `border`. Inset paints
+	// under the SVG's own edge and eats a pixel of the artwork - a stripe on
+	// one flag, a red panel on the other. A border shrinks the artwork into a
+	// smaller content box while the outer corner keeps the full radius, which
+	// leaves the two curves visibly out of step. This one sits clear of both.
+	//
+	// var(--border-color), like every other edge in this file, so the ring
+	// follows the desk into dark mode instead of staying a black line on a
+	// dark card.
+	box-shadow: 0 0 0 1px var(--border-color);
+
+	svg {
+		display: block;
+		width: 100%;
+		height: 100%;
+	}
+}
+
+// ── CSAT sidebar card ─────────────────────────────────────────────────────
+// frappe.ui.SidebarCard, set to look like the frappe-ui SidebarCard: 12px
+// padding and a small ghost close button in the corner. The desk card has no
+// options for these, so the rules go here.
+
+.frappe-card.taxjar-csat-card {
+	// Monochrome button: the desk card reads its button colors from these.
+	--frappe-card-button-bg-color: var(--surface-gray-2);
+	--frappe-card-button-color: var(--ink-gray-8);
+	--frappe-card-button-outline: var(--surface-gray-3);
+
+	position: relative;
+	gap: 12px;
+	padding: 12px;
+
+	.frappe-card-icon {
+		stroke-width: 1.25px;
+	}
+
+	.frappe-card-title-container {
+		align-items: center;
+		// Room for the close button, which sits over this row.
+		padding-right: 28px;
+	}
+
+	.frappe-card-title {
+		font-size: var(--text-sm);
+		font-weight: var(--font-weight-regular);
+	}
+
+	.frappe-card-description:empty {
+		display: none;
+	}
+
+	.close-button {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: transparent;
+		box-shadow: none;
+
+		&:hover {
+			background: var(--surface-gray-2);
+		}
+	}
+
+	.frappe-card-button {
+		font-size: var(--text-sm);
+
+		&:hover {
+			background-color: var(--surface-gray-3);
+		}
+	}
+}
+
+// A collapsed sidebar is a 48px rail of icons, with no room for the card.
+// Same breakpoint as the desk's own collapsed rules; on a phone the sidebar
+// opens as a full panel. !important beats the card's d-inline-flex.
+@media (min-width: 768px) {
+	.body-sidebar-container:not(.expanded) .taxjar-csat-card {
+		display: none !important;
+	}
+}
+
+// ── CSAT feedback scale ───────────────────────────────────────────────────
+// The 1–5 score bar in the feedback dialog (FeedbackScale in csat_card.js).
+// It is the desk TabButtons, made full width. A button always shows the tint
+// of its score, a darker tint on hover, and the solid color when picked.
+// Theme tokens, so the colors follow the dark theme. The .es-tab-buttons step
+// in each selector beats the TabButtons rules for the same states.
+
+.taxjar-feedback-scale {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-bottom: var(--margin-md);
+
+	.control-label {
+		margin-bottom: 0;
+	}
+
+	.es-tab-buttons {
+		display: flex;
+		gap: 2px;
+		padding: 2px;
+		border-radius: 10px;
+	}
+
+	.es-tab-buttons .es-pill {
+		flex: 1;
+		// One bar: only the two outer ends are round. Logical corners, so the
+		// round ends follow the reading direction.
+		border-radius: 0;
+		font-size: var(--text-base);
+		font-weight: var(--font-weight-medium);
+		background: var(--scale-tint);
+		color: var(--scale-ink);
+
+		&:first-child {
+			border-start-start-radius: 8px;
+			border-end-start-radius: 8px;
+		}
+
+		&:last-child {
+			border-start-end-radius: 8px;
+			border-end-end-radius: 8px;
+		}
+
+		&:hover {
+			background: var(--scale-tint-hover);
+		}
+
+		&[data-state="active"] {
+			background: var(--scale-solid);
+			color: var(--scale-on);
+			box-shadow: var(--shadow-sm);
+		}
+	}
+
+	.es-pill[data-score="1"] {
+		--scale-tint: var(--surface-red-2);
+		--scale-tint-hover: var(--surface-red-3);
+		--scale-ink: var(--ink-red-7);
+		--scale-solid: var(--surface-red-6);
+		--scale-on: var(--white);
+	}
+
+	.es-pill[data-score="2"] {
+		--scale-tint: var(--surface-orange-2);
+		--scale-tint-hover: var(--surface-orange-3);
+		--scale-ink: var(--ink-orange-7);
+		--scale-solid: var(--surface-orange-6);
+		--scale-on: var(--white);
+	}
+
+	.es-pill[data-score="3"] {
+		--scale-tint: var(--surface-amber-2);
+		--scale-tint-hover: var(--surface-amber-3);
+		--scale-ink: var(--ink-amber-7);
+		--scale-solid: var(--surface-amber-6);
+		// Amber is light, so dark text reads better on it, in both themes.
+		--scale-on: var(--amber-900);
+	}
+
+	// Frappe has no lime, so 4 and 5 are both green, and 5 is one step
+	// stronger.
+	.es-pill[data-score="4"] {
+		--scale-tint: var(--surface-green-2);
+		--scale-tint-hover: var(--surface-green-3);
+		--scale-ink: var(--ink-green-7);
+		--scale-solid: var(--surface-green-6);
+		--scale-on: var(--white);
+	}
+
+	.es-pill[data-score="5"] {
+		--scale-tint: var(--surface-green-3);
+		--scale-tint-hover: var(--surface-green-4);
+		--scale-ink: var(--ink-green-8);
+		--scale-solid: var(--surface-green-7);
+		--scale-on: var(--white);
+	}
+}
+
+.taxjar-feedback-scale-ends {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	font-size: var(--text-xs);
+	color: var(--ink-gray-5);
+}

@@ -1,0 +1,586 @@
+/*
+	Palette/typography/table treatment lifted from erpnext's own "Sales
+	Invoice with Item Image" print format (accounts/print_format/
+	sales_invoice_with_item_image) - same rounded highlight-bg tables, same
+	#171717 / #7c7c7c ink, so this sits next to core formats without looking
+	like a different product. Everything TaxJar-specific (status panel,
+	breakdown section) is new, styled to match.
+*/
+
+/*
+	Page margin for the PDF button, at the top level (not nested in any
+	selector or media query) - a hand-built ("classic") print format like
+	this one only gets a page margin on the Chrome/CDP PDF path from a
+	top-level .print-format rule; the Print Format record's own margin_top
+	field is never read for this kind of format, so it silently produced
+	margin-top: 0 in the PDF despite that field saying 15mm. This value
+	matches the record's own margin fields so both stay in agreement.
+*/
+.print-format {
+	margin-top: 15mm;
+	margin-bottom: 15mm;
+	margin-left: 15mm;
+	margin-right: 15mm;
+}
+
+/*
+	The rule above is also a margin on the element itself. On screen that
+	margin sits outside the white page, so the preview shows only the page's
+	own 15mm padding. In Print and PDF the page margin is already 15mm, and
+	the element margin came on top of it: 30mm in all. Printing drops it, so
+	both match the preview.
+
+	The PDF step also renders the repeated letter head in a page of its own,
+	inside a bare .print-format wrapper, with every style of this format.
+	There the margin pushed the letter head 15mm down and in, while its
+	height was measured without it, so the bottom of the letter head was cut
+	off and the body ran over it. body .print-format reaches both wrappers.
+
+	The PDF step reads page margins only from a rule whose selector is
+	exactly .print-format, so this one does not change them.
+*/
+@media print {
+	body .print-format {
+		margin: 0;
+	}
+}
+
+.invoice-page {
+	font-family: Inter, sans-serif;
+	color: #171717;
+}
+
+.print-format-body {
+	padding: 30px 12px 12px 12px !important;
+}
+
+/*
+	Clearfix: without it, .print-format-body's own height ignores its two
+	floated columns whenever there is no Terms and Conditions text - the one
+	remaining thing below them that happens to clear - and collapses around
+	them, so the footer/next page would sit on top of the totals column.
+*/
+.print-format-body::after {
+	content: "";
+	display: table;
+	clear: both;
+}
+
+.letter-head {
+	padding-top: 12px !important;
+	padding-bottom: 12px !important;
+}
+
+.letter-head-footer {
+	margin-top: 0px !important;
+}
+
+.title {
+	color: #7c7c7c !important;
+}
+
+.text-muted {
+	color: #7c7c7c !important;
+}
+
+.text-dark {
+	color: #171717 !important;
+}
+
+.small-text {
+	font-size: 11px;
+	color: #7c7c7c;
+}
+
+.text-left {
+	text-align: left;
+}
+
+.text-center {
+	text-align: center;
+}
+
+.text-right {
+	text-align: right;
+}
+
+.text-bold {
+	font-weight: 700;
+}
+
+.mt-15 {
+	margin-top: 15px;
+}
+
+.taxjar-doc-title {
+	/*
+		0, not a positive value - most of the gap under the letterhead is
+		the letterhead's OWN layout (its invoice-title/invoice-number cell
+		has a fixed height:90px, taller than its actual text), which this
+		format does not own or style. Adding our own margin on top of that
+		only made the gap worse.
+	*/
+	margin-top: 0;
+}
+
+.taxjar-doc-title h2 {
+	font-size: 20px;
+	font-weight: 700;
+	color: #171717;
+	margin: 0;
+	letter-spacing: 0.02em;
+}
+
+/* "EXPORT" under the title, close to it */
+.taxjar-doc-subtitle {
+	margin-top: 2px;
+	font-size: 12px;
+	font-weight: 400;
+	letter-spacing: 0.08em;
+	color: #7c7c7c;
+}
+
+.mt-20 {
+	margin-top: 20px;
+}
+
+.mw-400 {
+	max-width: 400px;
+}
+
+/*
+	Party table: a light frame and thin lines between its four cells,
+	same #ededed and rounding as the other cards. The table of invoice
+	number and dates inside the top-right cell keeps no lines.
+*/
+.info-table {
+	width: 100%;
+	border: 1px solid #ededed;
+	border-radius: 10px;
+	border-collapse: separate;
+	border-spacing: 0;
+	overflow: hidden;
+}
+
+.info-table td {
+	vertical-align: top;
+	padding: 0 !important;
+}
+
+.info-table > tbody > tr > td {
+	padding: 10px 12px !important;
+}
+
+/* The cell padding leaves less room; the invoice number and date labels stay on one line. */
+.info-table td td {
+	white-space: nowrap;
+}
+
+/*
+	Invoice number and dates: each row in its own box, with a line under
+	it that runs to the edges of the cell. The cell has no padding of its
+	own; the rows carry it.
+*/
+.info-table > tbody > tr > td.taxjar-doc-details-cell {
+	padding: 0 !important;
+}
+
+.taxjar-doc-details {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.info-table .taxjar-doc-details td {
+	padding: 8px 12px !important;
+	border-bottom: 1px solid #ededed;
+	vertical-align: middle;
+}
+
+/* The line of the party table under this cell closes the last row. */
+.info-table .taxjar-doc-details tr:last-child td {
+	border-bottom: none;
+}
+
+.info-table > tbody > tr > td:first-child {
+	border-right: 1px solid #ededed;
+}
+
+.info-table > tbody > tr:first-child > td {
+	border-bottom: 1px solid #ededed;
+}
+
+.info-text {
+	margin-bottom: 4px;
+	font-size: 12px;
+}
+
+/*
+	Ship From / Bill To / Ship To cells: the heading sits on top, then the
+	name, the address and its Tax ID. The cell has no padding of its own;
+	the heading and the body carry it.
+*/
+.info-table > tbody > tr > td.taxjar-party-cell {
+	padding: 0 !important;
+}
+
+.taxjar-party-head {
+	padding: 10px 12px 2px 12px;
+	font-size: 10.5px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: #7c7c7c;
+}
+
+.taxjar-party-body {
+	padding: 8px 12px;
+}
+
+/* Tax ID: under the address, the same size as the address, a little apart from it */
+.taxjar-tax-id {
+	margin-top: 6px;
+}
+
+/* The item's description, small and grey under its name */
+.taxjar-item-description {
+	margin-top: 2px;
+	font-size: 10.5px;
+	line-height: 1.4;
+	color: #7c7c7c;
+}
+
+.taxjar-item-description p {
+	margin: 0;
+}
+
+.items-table,
+.tax-table {
+	width: 100%;
+	border-collapse: separate;
+	border-spacing: 0;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.items-table td,
+.tax-table td {
+	border-bottom: 1px solid #ededed;
+	padding: 8px;
+	font-size: 12px;
+}
+
+.items-table thead td,
+.tax-table thead td {
+	color: #7c7c7c !important;
+	height: 32px;
+}
+
+.items-table thead tr:first-of-type td,
+.tax-table thead tr:first-of-type td {
+	border-bottom: none;
+}
+
+.items-table thead tr:first-child td:first-child,
+.tax-table thead tr:first-child td:first-child {
+	border-top-left-radius: 10px;
+	border-bottom-left-radius: 10px;
+}
+
+.items-table thead tr:first-child td:last-child,
+.tax-table thead tr:first-child td:last-child {
+	border-top-right-radius: 10px;
+	border-bottom-right-radius: 10px;
+}
+
+.highlight-bg {
+	background: #f8f8f8;
+}
+
+.row-divider {
+	border-bottom: 1px solid #e9e9e9;
+}
+
+.taxjar-grand-total td {
+	border-top: 1px solid #171717;
+	border-bottom: none;
+	padding-top: 8px !important;
+	font-size: 13px;
+}
+
+.in-words {
+	color: #171717 !important;
+	max-width: 500px;
+	word-wrap: break-word;
+	line-height: 1.5;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.taxjar-in-words-box {
+	/* Padding, not margin - margin-top is absorbed by "clearance" on an
+	   element that clears floats, so it draws no visible gap here. */
+	padding-top: 20px;
+}
+
+.taxjar-in-words-divider {
+	padding-top: 14px;
+	border-top: 1px solid #ededed;
+}
+
+.taxjar-in-words-label {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #7c7c7c;
+	margin-bottom: 3px;
+}
+
+/*
+	Terms and Conditions: a small grey label like TAX ANALYSIS and IN
+	WORDS, over a light card. clear: both, as the first thing below the two
+	floated columns; padding-top, not margin-top - a margin-top has no
+	visible effect on a box that clears floats.
+*/
+.taxjar-terms {
+	clear: both;
+	padding-top: 30px;
+}
+
+.taxjar-terms-label {
+	/* The label goes to the next page with the card, never alone at the foot of a page. */
+	break-after: avoid;
+	page-break-after: avoid;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #7c7c7c;
+	margin-bottom: 4px;
+}
+
+.taxjar-terms-body {
+	border: 1px solid #ededed;
+	border-radius: 10px;
+	padding: 10px 14px;
+	font-size: 11px;
+	line-height: 1.5;
+	color: #4d4d4d;
+}
+
+/*
+	Text pasted into the editor keeps its own inline size, colour and white
+	background on every span. The terms take the format's look instead.
+*/
+.taxjar-terms-body * {
+	font-size: inherit !important;
+	color: inherit !important;
+	background-color: transparent !important;
+}
+
+.taxjar-terms-body strong,
+.taxjar-terms-body b {
+	color: #171717 !important;
+	font-weight: 600;
+}
+
+/* The editor's own wrapper adds padding of its own. */
+.taxjar-terms-body .ql-editor {
+	padding: 0;
+}
+
+.taxjar-terms-body p {
+	margin: 0 0 6px 0;
+}
+
+.taxjar-terms-body ul,
+.taxjar-terms-body ol {
+	margin: 0;
+	padding-left: 16px;
+}
+
+.taxjar-terms-body li {
+	margin-bottom: 3px;
+	padding-left: 0;
+}
+
+.taxjar-terms-body > :last-child,
+.taxjar-terms-body .ql-editor > :last-child,
+.taxjar-terms-body li:last-child {
+	margin-bottom: 0;
+}
+
+/*
+	Left column shared by Tax Analysis and the status panel below it - a
+	single float/width here (rather than floating each block separately)
+	guarantees they stack vertically instead of trying to sit side by side.
+*/
+.taxjar-left-column {
+	float: left;
+	width: 48%;
+	margin-top: 15px;
+}
+
+/*
+	Mirrors .taxjar-left-column's width - an unconstrained float:right (its
+	own width driven purely by content) risked the row overflowing the page
+	next to a 48%-wide left column with no shared budget between them.
+	Explicit 48%/48% with a small gutter keeps both sides predictable at any
+	render width.
+*/
+.taxjar-totals-column {
+	float: right;
+	width: 48%;
+	margin-top: 15px;
+	margin-bottom: 5px;
+}
+
+/*
+	Wraps Tax Analysis's table + the status panel below it into one visual
+	card when both are showing - overflow:hidden here is what rounds the
+	panel's bottom corners (and the table's top corners, via its header),
+	not radius rules on the children themselves.
+*/
+.taxjar-analysis-card {
+	border: 1px solid #ededed;
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+/* TaxJar sales tax status panel */
+.taxjar-status-panel {
+	border-radius: 10px;
+	border: 1px solid #ededed;
+	background: #f8f8f8;
+	padding: 6px 12px;
+	margin-top: 12px;
+	font-size: 12px;
+}
+
+/* A single short line, nothing below it - equal padding top/bottom so it sits centred in the box, not closer to the bottom. */
+.taxjar-status-panel-compact {
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+
+/* Joined onto the table above it - no gap, no rounding of its own (the card wrapper handles that), just a thin divider where the table ends. */
+.taxjar-status-panel-attached {
+	margin-top: 0;
+	border-radius: 0;
+	/*
+		No side/bottom border here - the card wrapper (.taxjar-analysis-card)
+		already draws one around the table + this panel together. Only the
+		top edge needs a line, to mark where the table ends.
+	*/
+	border-width: 1px 0 0 0;
+}
+
+/* The white area of the card when there is no tax: one short reason in place of the jurisdiction table. */
+.taxjar-no-tax-message {
+	padding: 12px 16px;
+	font-size: 13px;
+	text-align: center;
+	color: #171717;
+}
+
+.taxjar-status-panel .taxjar-status-line {
+	font-size: 12px;
+	line-height: 1.4;
+	color: #7c7c7c;
+}
+
+.taxjar-status-panel .taxjar-status-line + div {
+	margin-top: 4px;
+}
+
+.taxjar-line-note {
+	display: block;
+	font-size: 10px;
+	color: #7c7c7c;
+}
+
+.taxjar-breakdown-section {
+	margin-top: 0;
+}
+
+.taxjar-breakdown-section h4 {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #7c7c7c;
+	margin: 0 0 4px 0;
+}
+
+/*
+	doc.taxjar_breakdown_html comes pre-rendered from the shared
+	templates/includes/taxjar_breakup.html macro (also used on the desk form
+	itself), as a plain Bootstrap .table.table-bordered.table-hover -
+	restyled here, scoped under .taxjar-analysis-card (the table's actual
+	parent - the heading above it lives in a separate .taxjar-breakdown-section
+	sibling, so a selector scoped to THAT div doesn't reach the table at
+	all), rather than editing the shared include itself (which would also
+	change how the breakdown renders on the desk form).
+
+	The table carries no border/radius/overflow of its own here - the card
+	wrapper (.taxjar-analysis-card) already provides all three for the
+	table + the status panel below it as one shape, so giving the table a
+	second, redundant frame would double up on it.
+*/
+.taxjar-analysis-card table {
+	/*
+		Frappe's own base print stylesheet (templates/styles/standard.css)
+		gives any element with class "table" (which the breakdown table
+		carries - table.table.table-bordered.table-hover, from the shared
+		taxjar_breakup.html include) a 20px top+bottom margin. That's what
+		was actually behind the big gaps above and below this table -
+		margin: 0 overrides it explicitly rather than leaving it to bite
+		again the next time this table's wrapper/selector changes.
+	*/
+	margin: 0;
+	width: 100%;
+	border: none;
+	border-radius: 0;
+	border-collapse: separate;
+	border-spacing: 0;
+}
+
+/*
+	A light table: thin lines between rows only, compact cells, and a
+	small grey header. The .print-format prefix outranks the Print Style's
+	own .print-format .table / .table-bordered cell rules (10px padding,
+	a grid on every cell), which otherwise win here.
+*/
+.print-format .taxjar-analysis-card .table th,
+.print-format .taxjar-analysis-card .table td {
+	border: none;
+	border-bottom: 1px solid #f0f0f0;
+	padding: 5px 8px;
+	font-size: 11px;
+	line-height: 1.4;
+}
+
+.print-format .taxjar-analysis-card .table thead th {
+	background: none;
+	color: #7c7c7c !important;
+	/* Normal case: the PDF column is narrow, and "JURISDICTION" in capitals does not fit. */
+	font-size: 10.5px;
+	font-weight: 600;
+	padding-top: 7px;
+	border-bottom: 1px solid #ededed;
+}
+
+/* Jurisdiction names come bold from the shared include; plain here. */
+.print-format .taxjar-analysis-card .table tbody td strong {
+	font-weight: normal;
+}
+
+.print-format .taxjar-analysis-card .table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.print-format .taxjar-analysis-card .table tfoot td {
+	border-top: 1px solid #ededed;
+	border-bottom: none;
+	padding-bottom: 7px;
+}

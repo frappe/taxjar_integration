@@ -1,0 +1,19 @@
+{
+	"name": "taxjar_integration",
+	"version": "0.0.1",
+	"private": true,
+	"description": "Client-side tests for the TaxJar Integration desk scripts.",
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"devDependencies": {
+		"jquery": "^3.7.1",
+		"jsdom": "^26.1.0",
+		"vitest": "^3.2.4"
+	}
+}

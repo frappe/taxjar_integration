@@ -1,0 +1,188 @@
+/* The page is built from the desk component library and the shared utility
+   classes (frappe/public/scss/common/utilities.scss), so its colours, type,
+   spacing, borders and radii all come from the desk's own tokens and follow
+   the dark theme.
+
+   Five things have no component and no utility class. Each one is below, with
+   what it is and why it cannot come from either. Every value still reads a
+   token where a token exists. */
+
+.taxjar-nexus-page {
+	padding: 24px 15px 48px;
+}
+
+/* 1. The page is one centred column. Two company cards and the gap between
+      them come to 720px, and the page head, both section heads and the count
+      card all run the same width - so every right edge on the page lines up,
+      and each refresh control sits at the edge of what it acts on. */
+.taxjar-nexus-column {
+	width: 100%;
+	max-width: 720px;
+	margin-inline: auto;
+}
+
+/* 2. Two columns, always: company cards append in rows of two rather than
+      reflowing to whatever the window happens to fit. The utilities carry
+      flex but no grid, and a wrapping flex row cannot give every card in a
+      row the same width.
+
+      Cards line up at the top of their row, so a card that opens its region
+      list grows on its own and its neighbour stays where it is. */
+.taxjar-nexus-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: calc(var(--spacing) * 4);
+	align-items: start;
+}
+
+/* A lone card, and the blank state, take the whole row. Half a row with
+   nothing beside it reads as a card that failed to load, and its right edge
+   would stop short of the control that acts on it. */
+.taxjar-nexus-grid > .taxjar-nexus-wide {
+	grid-column: 1 / -1;
+}
+
+/* Below the desk's own sm breakpoint, two columns leave a card too narrow for
+   a region name and its code on one line. */
+@media (max-width: 575.98px) {
+	.taxjar-nexus-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* 3. The region pill is the espresso badge (.es-badge, lg, outline), which
+      already carries the pill shape, the outline, the muted ink and the type
+      size. The one thing it does not carry is the box: the guided setup
+      wizard's Sync Nexus step draws the same regions in a roomier pill
+      (.ts-pill in taxjar_setup.css), so the two use the same measure.
+
+      height: auto lets the padding set the height, which the badge otherwise
+      fixes at its own step. */
+.taxjar-nexus-chip.es-badge {
+	height: auto;
+	padding: 4px 11px;
+	gap: 7px;
+}
+
+/* The line the control sits on: a flex item as wide as the row, so the chips
+   above it break before it and it takes the whole line. The control inside
+   keeps its own width. */
+.taxjar-nexus-more-line {
+	flex-basis: 100%;
+}
+
+/* The control that closes the row, as words rather than as a shape: the
+   espresso button (.es-button, xs, ghost) with its box taken off, at the
+   chip's type size and the chip's ink, with the dotted rule under it that the
+   count in 5 below already draws. The chips are the data and this is the one
+   action among them, so it carries no pill and no icon - a pill read as one
+   more region, and a chevron beside two words said what the words say.
+
+   The ink is the deepening: grey at rest, the chip's own step, so the action
+   sits with the regions it counts rather than over them. Then a step deeper
+   on hover, on the words and on the rule together, which is what answers the
+   pointer. The button's own hover fill would put the box back, so it goes.
+   The focus ring stays, and it is what answers a keyboard. */
+.taxjar-nexus-more.es-button {
+	height: auto;
+	/* The padding holds the ring clear of the words.
+
+	   The words then start where the words in the chips above them start: the
+	   chip's own 11px of padding, less this button's 4px. Set against the
+	   pill's outer edge instead, the control lined up with the company name
+	   above the list and read as a line under it, rather than as the end of
+	   the list itself. A pill is a shape, but this control is words, and words
+	   line up with words. */
+	padding: 2px 4px;
+	margin-inline-start: 7px;
+	color: var(--ink-gray-6);
+	/* The button's own two fills, set to nothing: a fill on hover or on press
+	   would put the box back around the words. The ink below is what answers
+	   the pointer instead, and the focus ring is what answers a keyboard. */
+	--bt-fill-bg-hover: transparent;
+	--bt-fill-bg-active: transparent;
+}
+
+.taxjar-nexus-more.es-button:hover {
+	color: var(--ink-gray-8);
+}
+
+/* The rule sits on the label rather than on the button, so it runs under the
+   words and not under the padding around them. See 5 below for why the pattern
+   is a background and not text-decoration. */
+.taxjar-nexus-more.es-button .es-button__label {
+	/* One step under the words, not the lighter step an edge takes: the rule
+	   is what says the words can be pressed, so it has to read at 13px. */
+	--taxjar-more-rule: var(--ink-gray-5);
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--taxjar-more-rule) 0 1px,
+		transparent 1px 3px
+	);
+	background-size: 100% 1px;
+	background-repeat: no-repeat;
+	background-position: left bottom;
+	padding-bottom: 2px;
+}
+
+.taxjar-nexus-more.es-button:hover .es-button__label {
+	--taxjar-more-rule: var(--ink-gray-8);
+}
+
+/* 4. A region code is set in a mono face, so a two letter code reads as a code
+      and not as a short word - as the wizard's .ts-pillcode does.
+
+      The desk has a --font-stack for its body type but no token for mono. Its
+      one mono stack is the one bootstrap gives code, kbd, pre and samp, which
+      is what every other piece of code in the desk renders in - so the list
+      below is that stack, copied. A <code> element would carry it without the
+      copy, but it also carries a pink fill and a padding that no utility class
+      can clear, which costs more than it saves. --font-stack-mono is read
+      first, so this falls away on its own if the desk ever names one. */
+.taxjar-nexus-code {
+	font-family: var(--font-stack-mono, Menlo, Monaco, Consolas, "Courier New", monospace);
+}
+
+/* 5. The count and its label are one link, so one dotted rule runs under the
+      whole phrase. The utilities carry no decoration classes.
+
+      Dotted, and the two halves keep their own ink: a solid underline in the
+      desk's link blue would pull a 26px number out of the card it sits in, and
+      the link is the whole point of the card, not an aside inside it.
+
+      The rule is a background, not text-decoration: underline. The phrase sets
+      a 26px number and base-size words on one baseline, and the browser paints
+      a text decoration once per inline box - so the dots restarted at the join
+      and the first of them came out long. A background paints once for the
+      whole anchor, so one pattern spans the phrase however the sizes change.
+
+      Vertical padding on an inline box moves the background down without
+      moving the text or the line it sits on, which is what puts the rule clear
+      of the descenders. text-decoration: none in both rules, because the desk's
+      own a:hover would otherwise add a second line under the first. */
+.taxjar-nexus-count {
+	--taxjar-count-rule: var(--outline-gray-3);
+	text-decoration: none;
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--taxjar-count-rule) 0 1px,
+		transparent 1px 3px
+	);
+	background-size: 100% 1px;
+	background-repeat: no-repeat;
+	background-position: left bottom;
+	padding-bottom: 2px;
+}
+
+.taxjar-nexus-count:hover {
+	--taxjar-count-rule: var(--ink-gray-6);
+	text-decoration: none;
+}
+
+/* The icon-only sync button has no loading_label span, so the framework's own
+   aria-busy rule (which only hides the icon alongside that span) never fires
+   here - hide it ourselves or the icon and spinner show together. Same fix as
+   the wizard's own fetch button. */
+.taxjar-nexus-sync-mount .es-button[aria-busy="true"] > svg {
+	display: none;
+}

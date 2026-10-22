@@ -1,0 +1,23 @@
+{
+ "creation": "2026-06-20 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "icon": "users",
+ "idx": 0,
+ "modified": "2026-07-14 10:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "TaxJar Integration",
+ "name": "taxjar-customers",
+ "owner": "Administrator",
+ "page_name": "taxjar-customers",
+ "roles": [
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  }
+ ],
+ "standard": "Yes",
+ "title": "TaxJar Customer Configuration"
+}
