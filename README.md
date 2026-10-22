@@ -76,7 +76,7 @@ bench --site <site-name> migrate
 5. Make a sales invoice and save it. The app adds a **Sales Tax** row with the amount from TaxJar.
 ## User guide
 
-The full user guide is on the [ERPNext documentation](https://docs.frappe.io/erpnext/taxjar-guided-setup). It tells you how to:
+With this app, you can:
 
 - prepare the TaxJar account, the API token and the ledgers,
 - complete the guided setup,
