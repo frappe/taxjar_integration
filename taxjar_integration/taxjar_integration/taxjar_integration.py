@@ -3536,6 +3536,10 @@ def get_company_scope(company: str):
 	}
 
 
+def _in_sandbox_mode():
+	return frappe.db.get_single_value("TaxJar Settings", "api_mode") == "Sandbox"
+
+
 def _validate_address_with_taxjar(doc, company):
 	"""Call TaxJar's address validation endpoint for US addresses.
 
@@ -3547,6 +3551,13 @@ def _validate_address_with_taxjar(doc, company):
 	that isn't documented publicly and either is plausible. Any other error
 	(401/422/5xx, connection issues) is not this address's fault, so it
 	doesn't block the save - same tolerant handling as before.
+
+	Not in Sandbox mode. TaxJar's sandbox has no /v2/addresses/validate and
+	answers it with a 404 ("No such route"), which the rule above read as "no
+	match" - every correct address reported invalid, and the setup wizard held
+	on it. The answer is known before any call, so none is made and none is
+	logged, same as the country guard below. A "No such route" 404 from any
+	other account is not a verdict about the address either.
 
 	United States only. TaxJar's address validation is a US service and the
 	payload below says so outright, hardcoding "US" whatever the address's own
@@ -3560,6 +3571,9 @@ def _validate_address_with_taxjar(doc, company):
 	country_code = (frappe.db.get_value("Country", doc.country, "code", cache=True) or "").upper()
 	if country_code != "US":
 		return {"checked": False, "reason": "unsupported_country"}
+
+	if _in_sandbox_mode():
+		return {"checked": False, "reason": "sandbox"}
 
 	client = get_client(company)
 	if not client:
@@ -3586,7 +3600,8 @@ def _validate_address_with_taxjar(doc, company):
 		full = getattr(err, "full_response", {}) or {}
 		status_code = full.get("status_code") if isinstance(full, dict) else None
 		log_taxjar_call(action="validate_address", status="error", error=getattr(err, "full_response", str(err)), context=ctx)
-		if status_code == 404:
+		detail = str(full.get("detail") or "") if isinstance(full, dict) else ""
+		if status_code == 404 and not detail.startswith("No such route"):
 			return {"checked": True, "valid": False}
 		return {"checked": False, "reason": "error"}
 	except Exception:

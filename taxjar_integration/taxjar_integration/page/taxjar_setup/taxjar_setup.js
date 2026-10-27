@@ -878,7 +878,7 @@ class TaxJarSetup {
 		const { tooltip, ...badge_opts } = opts;
 		const $badge = frappe.ui.badge(badge_opts);
 		$badge.attr({ role: "button", tabindex: 0 }).css("cursor", "pointer");
-		if (tooltip && frappe.ui.tooltip) frappe.ui.tooltip($badge, { text: tooltip });
+		if (tooltip && frappe.ui.tooltip) frappe.ui.tooltip($badge, { text: tooltip, delay: 0 });
 		$badge.on("click", () => onactivate());
 		$badge.on("keydown", (e) => {
 			if (e.key === "Enter" || e.key === " ") {
@@ -1369,9 +1369,21 @@ class TaxJarSetup {
 
 	// Nothing to verify without a complete address - TaxJar would be answering
 	// about a street with no state or postal code.
-	_address_is_verifiable(entry) {
+	_address_is_complete(entry) {
 		const info = entry.info || {};
 		return !!info.address && !(info.missing || []).length;
+	}
+
+	// TaxJar's sandbox has no address endpoint, so in Sandbox mode the card
+	// sends nothing and shows "Skipped" in place of a verdict.
+	_address_is_verifiable(entry) {
+		return this._address_is_complete(entry) && !this._is_sandbox_mode();
+	}
+
+	// The saved mode, not the Connect step's toggle: the server checks
+	// against the saved one, and Continue on Connect reloads the state.
+	_is_sandbox_mode() {
+		return (this.state || {}).api_mode === "Sandbox";
 	}
 
 	// A restatement of the address's own two flags, not a second place to edit
@@ -1451,6 +1463,16 @@ class TaxJarSetup {
 	// spinner -> green badge or red Retry), pointed at the address check.
 	_render_address_action(entry) {
 		const $action = entry.$card.find(".ts-addr-action").empty();
+		// A status, not a button: a click could only send the request the
+		// sandbox cannot answer.
+		if (this._address_is_complete(entry) && this._is_sandbox_mode()) {
+			const $badge = frappe.ui.badge({
+				label: __("Skipped"), theme: "gray", icon: "info", size: "lg",
+			});
+			if (frappe.ui.tooltip) frappe.ui.tooltip($badge, { text: __("Address validation is not supported in sandbox."), delay: 0 });
+			$action.append($badge);
+			return;
+		}
 		if (!this._address_is_verifiable(entry)) return;
 
 		if (entry.verified) {
