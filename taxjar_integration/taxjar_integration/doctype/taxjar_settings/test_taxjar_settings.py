@@ -1681,7 +1681,7 @@ class TestSetSalesTaxCache(UnitTestCase):
 	show it.
 	"""
 
-	def _run(self, cache, settings_modified, company="Test Co"):
+	def _run(self, cache, settings_modified, company="Test Co", on="2026-08-25"):
 		doc = _make_doc(taxes=[], company=company)
 		tax_data = MagicMock(amount_to_collect=85.0)
 		tax_data.breakdown.line_items = []
@@ -1701,10 +1701,21 @@ class TestSetSalesTaxCache(UnitTestCase):
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.check_for_nexus", return_value=True), \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.validate_tax_request", return_value=tax_data) as mock_validate, \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.db.get_value", side_effect=_scalar_get_value(settings_modified)), \
-		     patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.cache", return_value=cache):
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.cache", return_value=cache), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration.today", return_value=on):
 			set_sales_tax(doc, None)
 
 		return mock_validate
+
+	def test_a_new_month_does_not_hit_the_cache(self):
+		"""An answer fetched just before midnight on the last day of a month
+		must not be served on the 1st, the day rates take effect."""
+		cache = _fake_cache()
+
+		self._run(cache, "2026-08-25 10:00:00", on="2026-09-30")
+		second_call = self._run(cache, "2026-08-25 10:00:00", on="2026-10-01")
+
+		second_call.assert_called_once()
 
 	def test_identical_payload_and_unchanged_settings_hits_the_cache(self):
 		cache = _fake_cache()

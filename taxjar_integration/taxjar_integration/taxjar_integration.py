@@ -1642,7 +1642,10 @@ def set_sales_tax(doc, method):
 		log_taxjar_call(action="tax_for_order", status="reused", context=_ctx)
 		return
 
-	cache_key = "taxjar_tax:" + fingerprint
+	# The month rides along for the same reason _can_keep_stored_tax() checks
+	# it: an answer fetched at 23:58 on the last day of a month must not be
+	# served at 00:01 on the 1st, the day rates take effect.
+	cache_key = f"taxjar_tax:{today()[:7]}:{fingerprint}"
 	cached = frappe.cache().get_value(cache_key)
 
 	if cached is not None:
