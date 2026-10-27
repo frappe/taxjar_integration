@@ -1190,6 +1190,9 @@ class TaxJarSetup {
 			<p class="ts-fieldnote">${__("Configure ship from address for accurate sales tax calculation, you can add additional addresses later.")}</p>
 			<div class="ts-cardgrid ts-address-cards"></div>
 		`);
+		// Column count for the content-sized grid in the CSS: one card per
+		// company, two to a row.
+		this.$body.find(".ts-address-cards").css("--ts-addr-cols", Math.min(creds.length, 2));
 
 		const byCompany = {};
 		(s.addresses || []).forEach((a) => { byCompany[a.company] = a; });

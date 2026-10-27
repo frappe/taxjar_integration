@@ -442,6 +442,26 @@
    it stretching. */
 .taxjar-setup .ts-addr-pickrow .ts-addr-new { display: flex; justify-content: flex-start; }
 
+/* Address cards are as wide as their content, up to 420px, so a short address
+   does not leave a wide gap before its badge. An inline grid sizes its 1fr
+   columns to the widest card, so the cards in a row keep one width.
+   --ts-addr-cols is the card count, at most 2 (set in _render_address). The
+   picker row's min-width keeps the Link field and "New address" side by side,
+   which is what the card would otherwise shrink below. */
+.taxjar-setup { container-type: inline-size; }
+.taxjar-setup .ts-address-cards {
+	display: inline-grid; max-width: 100%; vertical-align: top;
+	grid-template-columns: repeat(var(--ts-addr-cols, 1), 1fr);
+}
+.taxjar-setup .ts-address-cards > .ts-card { max-width: 420px; }
+.taxjar-setup .ts-address-cards .ts-addr-pickrow { min-width: calc(2 * 150px + 12px); }
+/* Two cards no longer fit side by side: one column, and the picker row may
+   stack again. */
+@container (max-width: 760px) {
+	.taxjar-setup .ts-address-cards { display: grid; grid-template-columns: minmax(0, 420px); }
+	.taxjar-setup .ts-address-cards .ts-addr-pickrow { min-width: 0; }
+}
+
 .taxjar-setup .ts-addr-preview {
 	border: 1px solid var(--border-color); border-radius: var(--border-radius-md, 6px);
 	padding: 12px; display: flex; flex-direction: column; gap: 8px;
