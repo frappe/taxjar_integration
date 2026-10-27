@@ -8524,6 +8524,7 @@ class TestAddressValidationWithTaxJar(UnitTestCase):
 
 	def _check(self, client):
 		with patch(f"{self.MOD}.get_client", return_value=client), \
+		     patch(f"{self.MOD}._in_sandbox_mode", return_value=False), \
 		     patch(f"{self.MOD}.log_taxjar_call"):
 			return _validate_address_with_taxjar(self._make_address_doc(), "Test Co")
 
@@ -8545,6 +8546,7 @@ class TestAddressValidationWithTaxJar(UnitTestCase):
 		client = MagicMock()
 		client.validate_address.return_value = []
 		with patch(f"{self.MOD}.get_client", return_value=client), \
+		     patch(f"{self.MOD}._in_sandbox_mode", return_value=False), \
 		     patch(f"{self.MOD}.log_taxjar_call") as mock_log:
 			_validate_address_with_taxjar(self._make_address_doc(), "Test Co")
 
@@ -8574,6 +8576,29 @@ class TestAddressValidationWithTaxJar(UnitTestCase):
 		client.validate_address.side_effect = err
 
 		self.assertEqual(self._check(client), {"checked": True, "valid": False})
+
+	def test_sandbox_mode_makes_no_call_and_writes_no_log(self):
+		"""TaxJar's sandbox has no /v2/addresses/validate. Its 404 read as "no
+		match", so every correct address showed invalid in Sandbox mode."""
+		client = MagicMock()
+		with patch(f"{self.MOD}.get_client", return_value=client) as get_client, \
+		     patch(f"{self.MOD}._in_sandbox_mode", return_value=True), \
+		     patch(f"{self.MOD}.log_taxjar_call") as mock_log:
+			res = _validate_address_with_taxjar(self._make_address_doc(), "Test Co")
+
+		self.assertEqual(res, {"checked": False, "reason": "sandbox"})
+		get_client.assert_not_called()
+		mock_log.assert_not_called()
+
+	def test_a_404_for_a_missing_route_is_not_a_verdict(self):
+		"""The account has no address endpoint. That says nothing about the
+		address, so it must not show as invalid."""
+		client = MagicMock()
+		err = taxjar.exceptions.TaxJarResponseError("not found")
+		err.full_response = {"status_code": 404, "detail": "No such route 'POST /v2/addresses/validate'"}
+		client.validate_address.side_effect = err
+
+		self.assertEqual(self._check(client), {"checked": False, "reason": "error"})
 
 	def test_an_unreachable_api_is_not_the_addresss_fault(self):
 		client = MagicMock()
@@ -15918,6 +15943,7 @@ class TestAddressVerificationCountryGuard(UnitTestCase):
 		client = MagicMock()
 		client.validate_address.return_value = [{"zip": "33602"}]
 		with patch("taxjar_integration.taxjar_integration.taxjar_integration.frappe.db.get_value", return_value="US"), \
+		     patch("taxjar_integration.taxjar_integration.taxjar_integration._in_sandbox_mode", return_value=False), \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.get_client", return_value=client), \
 		     patch("taxjar_integration.taxjar_integration.taxjar_integration.log_taxjar_call"):
 			res = _validate_address_with_taxjar(doc, "Frappe Tech")
@@ -15946,6 +15972,25 @@ class TestGuidedSetupAddressStepJS(UnitTestCase):
 			steps,
 			["welcome", "connect", "accounts", "address", "features", "nexus", "review"],
 		)
+
+	def test_sandbox_mode_shows_skipped_and_sends_no_check(self):
+		"""The card checks itself on sight. In Sandbox mode it must not: the
+		sandbox has no address endpoint, and its 404 read as "invalid"."""
+		js = self._setup_js()
+
+		verifiable = js.split("_address_is_verifiable(entry) {")[1].split("\n\t}\n")[0]
+		self.assertIn("!this._is_sandbox_mode()", verifiable)
+
+		action = js.split("_render_address_action(entry) {")[1].split("\n\t}\n")[0]
+		sandbox = action.split("this._is_sandbox_mode()) {")[1].split("return;")[0]
+		self.assertIn('label: __("Skipped"), theme: "gray"', sandbox)
+		self.assertIn('__("Address validation is not supported in sandbox.")', sandbox)
+		# A status only: nothing to click, since a click would send the request.
+		self.assertNotIn("_build_status_badge", sandbox)
+		self.assertNotIn("_verify_address", sandbox)
+
+		mode = js.split("_is_sandbox_mode() {")[1].split("\n\t}\n")[0]
+		self.assertIn('(this.state || {}).api_mode === "Sandbox"', mode)
 
 	def test_ambiguity_warning_asks_about_the_company_not_the_shown_address(self):
 		"""Selecting a company's other address is ordinary and Continue pins it;
@@ -24122,7 +24167,7 @@ class TestNoNativeTitleTooltips(UnitTestCase):
 		fn = js.split("_build_status_badge(opts, onactivate) {")[1].split("\n\t}\n")[0]
 		self.assertIn("const { tooltip, ...badge_opts } = opts;", fn)
 		self.assertIn("frappe.ui.badge(badge_opts)", fn)
-		self.assertIn("frappe.ui.tooltip($badge, { text: tooltip })", fn)
+		self.assertIn("frappe.ui.tooltip($badge, { text: tooltip, delay: 0 })", fn)
 
 	def test_nexus_refresh_buttons_use_tooltip_not_title(self):
 		js = self._page_js("taxjar_nexus")

@@ -59,7 +59,7 @@ SETUP_STEPS = ("welcome", "connect", "accounts", "address", "features", "nexus",
 # and the features walkthrough on the "TaxJar is configured" screen.
 SETUP_VIDEOS = ("setup", "features")
 CONNECTION_RESULTS = ("ok", "no_token", "invalid_token", "rejected", "unreachable", "error")
-ADDRESS_RESULTS = ("valid", "not_found", "unsupported_country", "unreachable", "error", "no_credential")
+ADDRESS_RESULTS = ("valid", "not_found", "unsupported_country", "sandbox", "unreachable", "error", "no_credential")
 FAILURE_KINDS = ("connection", "response", "unexpected")
 HTTP_STATUSES = tuple(range(400, 600))
 BLOCK_REASONS = (

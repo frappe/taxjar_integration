@@ -442,6 +442,26 @@
    it stretching. */
 .taxjar-setup .ts-addr-pickrow .ts-addr-new { display: flex; justify-content: flex-start; }
 
+/* Address cards are as wide as their content, up to 420px, so a short address
+   does not leave a wide gap before its badge. An inline grid sizes its 1fr
+   columns to the widest card, so the cards in a row keep one width.
+   --ts-addr-cols is the card count, at most 2 (set in _render_address). The
+   picker row's min-width keeps the Link field and "New address" side by side,
+   which is what the card would otherwise shrink below. */
+.taxjar-setup { container-type: inline-size; }
+.taxjar-setup .ts-address-cards {
+	display: inline-grid; max-width: 100%; vertical-align: top;
+	grid-template-columns: repeat(var(--ts-addr-cols, 1), 1fr);
+}
+.taxjar-setup .ts-address-cards > .ts-card { max-width: 420px; }
+.taxjar-setup .ts-address-cards .ts-addr-pickrow { min-width: calc(2 * 150px + 12px); }
+/* Two cards no longer fit side by side: one column, and the picker row may
+   stack again. */
+@container (max-width: 760px) {
+	.taxjar-setup .ts-address-cards { display: grid; grid-template-columns: minmax(0, 420px); }
+	.taxjar-setup .ts-address-cards .ts-addr-pickrow { min-width: 0; }
+}
+
 .taxjar-setup .ts-addr-preview {
 	border: 1px solid var(--border-color); border-radius: var(--border-radius-md, 6px);
 	padding: 12px; display: flex; flex-direction: column; gap: 8px;
@@ -568,14 +588,18 @@
    company grid's own gap, so the page reads as one set of cards. */
 .taxjar-setup .ts-conn { margin-bottom: 16px; }
 .taxjar-setup .ts-card-b.ts-conn-b { padding: 14px 20px; gap: 0; }
-/* The rows use the desk font and the Espresso .text-base values. Espresso's
-   regular weight is 420, so a literal 400 draws thinner than the desk text. */
-.taxjar-setup .ts-conn .ts-kv {
-	align-items: center; border-bottom: 0; padding: 3px 0;
-	font-family: var(--font-stack); font-size: var(--text-base); letter-spacing: 0.015em;
+/* The values use the desk font and the Espresso .text-base values. The labels
+   are set like the company card's labels below (.ts-co-sec dt), so the two
+   cards label their rows alike. Espresso's regular weight is 420, so a literal
+   400 draws thinner than the desk text. */
+.taxjar-setup .ts-conn .ts-kv { align-items: center; border-bottom: 0; padding: 3px 0; }
+.taxjar-setup .ts-conn .ts-kv > span:first-child {
+	color: var(--text-muted); font-size: var(--text-sm); font-weight: var(--font-weight-regular);
 }
-.taxjar-setup .ts-conn .ts-kv > span:first-child { color: var(--text-color); font-weight: var(--font-weight-regular); }
-.taxjar-setup .ts-conn .ts-kv > span:last-child { font-weight: var(--font-weight-regular); }
+.taxjar-setup .ts-conn .ts-kv > span:last-child {
+	font-family: var(--font-stack); font-size: var(--text-base); letter-spacing: 0.015em;
+	font-weight: var(--font-weight-regular);
+}
 
 /* Two cards in a row on a wide screen, one on a narrow screen. Both cards in a
    row take the height of the taller one, so each row ends on one line. */
@@ -601,7 +625,7 @@
 }
 .taxjar-setup .ts-co-sec:first-child { border-top: 0; padding-top: 16px; }
 .taxjar-setup .ts-co-sec:last-child { padding-bottom: 18px; }
-.taxjar-setup .ts-co-sec dt { font-weight: 400; color: var(--text-muted); }
+.taxjar-setup .ts-co-sec dt { font-weight: var(--font-weight-regular); color: var(--text-muted); }
 .taxjar-setup .ts-co-sec dd { margin: 0; color: var(--text-color); line-height: 1.6; overflow-wrap: anywhere; }
 .taxjar-setup .ts-co-sec .ts-flags { margin-top: 0; }
 @media (max-width: 480px) {
