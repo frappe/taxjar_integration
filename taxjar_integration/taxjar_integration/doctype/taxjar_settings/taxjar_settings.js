@@ -517,12 +517,12 @@ frappe.ui.form.on('TaxJar Settings', {
 			!!(frm.perm && frm.perm[0] && frm.perm[0].write)
 		);
 
-		const account_query = (doc, cdt, cdn) => {
+		const account_query = (root_type) => (doc, cdt, cdn) => {
 			const row = locals[cdt][cdn];
-			return { filters: { company: row.company, is_group: 0 } };
+			return { filters: { company: row.company, is_group: 0, root_type } };
 		};
-		frm.set_query('tax_account_head', 'company_config', account_query);
-		frm.set_query('shipping_account_head', 'company_config', account_query);
+		frm.set_query('tax_account_head', 'company_config', account_query('Liability'));
+		frm.set_query('shipping_account_head', 'company_config', account_query(['in', ['Income', 'Expense']]));
 	},
 
 	api_mode(frm) {

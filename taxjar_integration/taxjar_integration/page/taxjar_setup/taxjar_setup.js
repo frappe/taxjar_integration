@@ -1095,7 +1095,7 @@ class TaxJarSetup {
 					label: __("Sales Tax Ledger Account"), reqd: 1,
 					show_description_on_click: 1,
 					description: __("Sales Tax Liability towards government."),
-					get_query: () => ({ filters: { company: cred.company, is_group: 0 } }),
+					get_query: () => ({ filters: { company: cred.company, is_group: 0, root_type: "Liability" } }),
 				},
 				render_input: true,
 			});
@@ -1108,7 +1108,9 @@ class TaxJarSetup {
 					label: __("Shipping Ledger Account"), reqd: 1,
 					show_description_on_click: 1,
 					description: __("Shipping & Handling fees charged to your customer. (Tax applicability as per state rules in TaxJar)"),
-					get_query: () => ({ filters: { company: cred.company, is_group: 0 } }),
+					get_query: () => ({
+						filters: { company: cred.company, is_group: 0, root_type: ["in", ["Income", "Expense"]] },
+					}),
 				},
 				render_input: true,
 			});

@@ -124,11 +124,15 @@ describe("the ledger pickers", () => {
 
 		const { cdt, cdn } = add_grid_row(CONFIG, "row-1", { company: "US Off Co" });
 
-		for (const fieldname of ["tax_account_head", "shipping_account_head"]) {
+		const root_types = {
+			tax_account_head: "Liability",
+			shipping_account_head: ["in", ["Income", "Expense"]],
+		};
+		for (const [fieldname, root_type] of Object.entries(root_types)) {
 			expect(queries[fieldname], `${fieldname} has no filter`).toBeTruthy();
 			expect(queries[fieldname].parentfield).toBe("company_config");
 			expect(queries[fieldname].query({}, cdt, cdn)).toEqual({
-				filters: { company: "US Off Co", is_group: 0 },
+				filters: { company: "US Off Co", is_group: 0, root_type },
 			});
 		}
 	});
