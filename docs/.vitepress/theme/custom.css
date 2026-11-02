@@ -1,0 +1,272 @@
+/* Screenshots have a white background, like the page. A border shows where
+   each one starts and ends. */
+.vp-doc img {
+	border: 1px solid var(--vp-c-divider);
+	border-radius: 8px;
+	margin: 16px 0;
+}
+
+:root {
+	--vp-c-brand-1: #12805c;
+	--vp-c-brand-2: #0f6e4f;
+	--vp-c-brand-3: #16a06f;
+	--vp-c-brand-soft: rgba(22, 160, 111, 0.14);
+}
+
+.dark {
+	--vp-c-brand-1: #3dd68c;
+	--vp-c-brand-2: #30b877;
+	--vp-c-brand-3: #16a06f;
+}
+
+/* Keep the home heading on two lines on wide screens. */
+@media (min-width: 1152px) {
+	.VPHero.has-image .main {
+		max-width: none;
+	}
+
+	.VPHero .name,
+	.VPHero .text {
+		white-space: nowrap;
+	}
+}
+
+/* Home buttons: rounded corners, not pills. */
+.VPHero .actions .VPButton.medium {
+	border-radius: 8px;
+}
+
+/* Home cards: a small icon beside the title. */
+.VPFeature .box {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	grid-template-rows: auto 1fr auto;
+	column-gap: 12px;
+	align-items: center;
+}
+
+.VPFeature .box > .VPImage {
+	width: 18px;
+	height: 18px;
+	margin-bottom: 0;
+}
+
+.VPFeature .box .title {
+	padding-top: 0;
+}
+
+.VPFeature .box .details,
+.VPFeature .box .link-text {
+	grid-column: 1 / -1;
+	align-self: start;
+}
+
+/* More space between a section's introduction and its first subsection. */
+.vp-doc p.section-intro {
+	margin-bottom: 40px;
+}
+
+/* Step-by-step list: a numbered circle per step, joined by a vertical line.
+   Markdown list: add {.steps} on the line after it. Collapsible steps: an
+   <ol class="steps"> of <li><details><summary><strong>Name</strong>
+   <span>Description</span></summary> ... </details></li>. */
+.vp-doc ol.steps {
+	list-style: none;
+	counter-reset: step;
+	padding-left: 0;
+}
+
+.vp-doc ol.steps > li {
+	counter-increment: step;
+	position: relative;
+	margin: 0;
+	padding: 0 0 20px 48px;
+}
+
+.vp-doc ol.steps > li::before {
+	content: counter(step);
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	background: var(--vp-c-brand-soft);
+	color: var(--vp-c-brand-1);
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 30px;
+	text-align: center;
+}
+
+.vp-doc ol.steps > li::after {
+	content: '';
+	position: absolute;
+	left: 14px;
+	top: 36px;
+	bottom: 6px;
+	width: 2px;
+	background: var(--vp-c-divider);
+}
+
+.vp-doc ol.steps > li:last-child {
+	padding-bottom: 0;
+}
+
+.vp-doc ol.steps > li:last-child::after {
+	display: none;
+}
+
+.vp-doc ol.steps > li > p {
+	margin: 0;
+}
+
+.vp-doc ol.steps > li > p:first-child {
+	line-height: 30px;
+}
+
+.vp-doc ol.steps > li > p + p {
+	color: var(--vp-c-text-2);
+}
+
+/* A collapsible step, minimal: no card. A small outlined number, the step
+   name and description, and a plain chevron on the right. The whole row
+   opens the step. */
+.vp-doc ol.steps > li:has(> details) {
+	padding: 0 0 8px 40px;
+}
+
+.vp-doc ol.steps > li:has(> details)::before {
+	top: 10px;
+	width: 24px;
+	height: 24px;
+	border: 1px solid var(--vp-c-divider);
+	background: var(--vp-c-bg);
+	color: var(--vp-c-text-2);
+	font-size: 12px;
+	line-height: 22px;
+	transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.vp-doc ol.steps > li:has(> details[open])::before {
+	border-color: var(--vp-c-text-1);
+	background: var(--vp-c-text-1);
+	color: var(--vp-c-bg);
+}
+
+.vp-doc ol.steps > li:has(> details)::after {
+	left: 11px;
+	top: 34px;
+	bottom: -10px;
+	width: 1px;
+}
+
+.vp-doc ol.steps > li:has(> details) + li {
+	margin-top: 0;
+}
+
+.vp-doc ol.steps details {
+	margin: 0;
+}
+
+.vp-doc ol.steps details > summary {
+	position: relative;
+	display: block;
+	list-style: none;
+	cursor: pointer;
+	margin: 0;
+	padding: 8px 32px 8px 0;
+}
+
+.vp-doc ol.steps details > summary::-webkit-details-marker {
+	display: none;
+}
+
+.vp-doc ol.steps details > summary:focus-visible {
+	outline: 2px solid var(--vp-c-brand-1);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+/* The step name is an h3, so that the outline on the right lists it. It looks
+   like bold text, not like a page heading. */
+.vp-doc ol.steps details > summary :is(strong, h3) {
+	display: block;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: 16px;
+	line-height: 24px;
+	font-weight: 600;
+	letter-spacing: normal;
+	transition: color 0.2s;
+}
+
+.vp-doc ol.steps details > summary:hover span {
+	color: var(--vp-c-text-1);
+}
+
+.vp-doc ol.steps details > summary span {
+	display: block;
+	color: var(--vp-c-text-2);
+	font-size: 14px;
+	line-height: 22px;
+	transition: color 0.2s;
+}
+
+/* The chevron. */
+.vp-doc ol.steps details > summary::after {
+	content: '';
+	position: absolute;
+	right: 6px;
+	top: 18px;
+	width: 7px;
+	height: 7px;
+	border-right: 1.5px solid var(--vp-c-text-3);
+	border-bottom: 1.5px solid var(--vp-c-text-3);
+	transform: rotate(45deg);
+	transition: transform 0.2s, top 0.2s, border-color 0.2s;
+}
+
+.vp-doc ol.steps details > summary:hover::after,
+.vp-doc ol.steps details[open] > summary::after {
+	border-color: var(--vp-c-text-1);
+}
+
+.vp-doc ol.steps details[open] > summary::after {
+	top: 22px;
+	transform: rotate(225deg);
+}
+
+/* The step content below the row. */
+.vp-doc ol.steps details > :not(summary) {
+	margin-top: 12px;
+}
+
+.vp-doc ol.steps details[open] {
+	padding-bottom: 16px;
+}
+
+/* Mermaid diagrams in the docs colours, in both themes. Mermaid puts its own
+   colours in the SVG, so these rules need !important. */
+.vp-doc .mermaid .node rect,
+.vp-doc .mermaid .node polygon,
+.vp-doc .mermaid .node circle {
+	fill: var(--vp-c-brand-soft) !important;
+	stroke: var(--vp-c-brand-1) !important;
+}
+
+.vp-doc .mermaid .nodeLabel,
+.vp-doc .mermaid .node text {
+	color: var(--vp-c-text-1) !important;
+	fill: var(--vp-c-text-1) !important;
+}
+
+.vp-doc .mermaid .flowchart-link {
+	stroke: var(--vp-c-brand-1) !important;
+}
+
+.vp-doc .mermaid marker path {
+	fill: var(--vp-c-brand-1) !important;
+	stroke: var(--vp-c-brand-1) !important;
+}

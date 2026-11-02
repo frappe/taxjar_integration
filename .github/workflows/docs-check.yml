@@ -1,0 +1,57 @@
+name: Docs check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  # A change to what the app does and an unchanged docs/ folder is how the docs
+  # drift: nobody decides to leave them behind, they just are. This job makes
+  # that a decision. It fails when user-facing code changed and docs/ did
+  # not, and the PR either gets a docs commit (comment /update-docs) or the
+  # label "no-docs", which leaves a record of the choice.
+  docs:
+    runs-on: ubuntu-latest
+    name: Docs
+
+    steps:
+      - name: Compare the changed files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.labels.some((label) => label.name === 'no-docs')) {
+              core.info('The label "no-docs" is set.');
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const names = files.map((file) => file.filename);
+
+            // User-facing code: the app, but not its tests and patches.
+            const code = names.filter(
+              (name) =>
+                name.startsWith('taxjar_integration/') &&
+                !/(^|\/)tests?\/|\/test_[^/]+\.(py|js)$|\/patches\//.test(name),
+            );
+            const docs = names.filter((name) => name.startsWith('docs/'));
+
+            if (code.length && !docs.length) {
+              core.setFailed(
+                [
+                  'Code changed, but docs/ did not:',
+                  ...code.map((name) => `  - ${name}`),
+                  '',
+                  'Comment /update-docs on the PR to update the docs in this PR,',
+                  'or add the label "no-docs".',
+                ].join('\n'),
+              );
+            }
