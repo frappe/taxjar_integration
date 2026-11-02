@@ -776,6 +776,20 @@ class TestRemoveTaxjarRows(UnitTestCase):
 		_remove_taxjar_rows(doc, config)
 		self.assertEqual(len(doc.taxes), 0)
 
+	def test_recalculates_the_totals_by_default(self):
+		"""With no tax to add back, the totals without the row are the final ones."""
+		doc = _make_doc(taxes=[_make_tax_row("Sales Tax - TC", TAXJAR_ROW_DESCRIPTION)])
+		with patch.object(doc, "run_method") as run_method:
+			_remove_taxjar_rows(doc, MagicMock(tax_account_head="Sales Tax - TC"))
+		self.assertIn(call("calculate_taxes_and_totals"), run_method.call_args_list)
+
+	def test_leaves_the_totals_to_a_caller_that_adds_the_row_back(self):
+		doc = _make_doc(taxes=[_make_tax_row("Sales Tax - TC", TAXJAR_ROW_DESCRIPTION)])
+		with patch.object(doc, "run_method") as run_method:
+			_remove_taxjar_rows(doc, MagicMock(tax_account_head="Sales Tax - TC"), recalculate=False)
+		run_method.assert_not_called()
+		self.assertEqual(doc.taxes, [])
+
 
 # ── Part B: _classify_foreign_tax_rows (design doc §4) ────────────────────────
 
@@ -1900,6 +1914,75 @@ class TestSetSalesTaxKeepsStoredTax(UnitTestCase):
 
 		self.assertIsNone(doc.taxjar_calc_fingerprint)
 		self.assertIsNone(doc.taxjar_calc_date)
+
+	def test_a_submit_with_nothing_changed_keeps_the_tax(self):
+		"""Validate at submit runs at docstatus 1, where get_line_item_dict()
+		adds each line's sales_tax for the filing job. That key used to change
+		the fingerprint, so every submit asked TaxJar again."""
+		line = {"id": 1, "unit_price": 1000.0, "quantity": 1}
+		doc = _make_doc(taxes=[])
+		self._save(doc, tax_dict={"to_zip": "90002", "line_items": [dict(line)]})
+
+		submit_call, _ = self._save(
+			doc, tax_dict={"to_zip": "90002", "line_items": [dict(line, sales_tax=85.0)]}
+		)
+
+		submit_call.assert_not_called()
+
+
+class TestSetSalesTaxTotalsCarryTheTaxRow(UnitTestCase):
+	"""Every calculation of the totals in set_sales_tax sees the final TaxJar row.
+
+	ERPNext checks the allocated advance inside calculate_taxes_and_totals. The
+	totals used to be calculated once with the old row removed and the new one
+	not yet added, so an advance that also covered the tax was checked against
+	the net total and the Sales Invoice could not be submitted (issue #10).
+	"""
+
+	_MODULE = "taxjar_integration.taxjar_integration.taxjar_integration"
+
+	def _calculated_tax_rows(self, doc, tax_dict):
+		"""set_sales_tax on doc; the TaxJar tax on doc at each calculation."""
+		tax_data = MagicMock(amount_to_collect=85.0)
+		tax_data.breakdown.line_items = []
+		tax_data.jurisdictions = MagicMock(state="CA", county="", city="")
+		seen = []
+
+		def run_method(method):
+			if method == "calculate_taxes_and_totals":
+				seen.append(sum(t.tax_amount for t in doc.taxes if t.account_head == "Sales Tax - TC"))
+
+		with patch.object(doc, "run_method", side_effect=run_method), \
+		     patch(f"{self._MODULE}.frappe.db.get_single_value", return_value=1), \
+		     patch(f"{self._MODULE}.get_region", return_value="United States"), \
+		     patch(f"{self._MODULE}.get_company_config", return_value=MagicMock(tax_account_head="Sales Tax - TC", shipping_account_head="Freight - TC")), \
+		     patch(f"{self._MODULE}.get_tax_data", return_value=tax_dict), \
+		     patch(f"{self._MODULE}.check_for_nexus", return_value=True), \
+		     patch(f"{self._MODULE}.validate_tax_request", return_value=tax_data), \
+		     patch(f"{self._MODULE}.frappe.db.get_value", side_effect=_scalar_get_value(None)), \
+		     patch(f"{self._MODULE}.frappe.cache", return_value=_no_cache()), \
+		     patch(f"{self._MODULE}.capture_once"), \
+		     patch(f"{self._MODULE}.days_since_setup"), \
+		     patch(f"{self._MODULE}.log_taxjar_call"):
+			set_sales_tax(doc, None)
+
+		return seen
+
+	def test_a_recalculated_tax_is_on_the_document_at_every_calculation(self):
+		doc = _make_doc(taxes=[_make_tax_row("Sales Tax - TC", TAXJAR_ROW_DESCRIPTION, 80.0)])
+
+		seen = self._calculated_tax_rows(doc, {"to_country": "US", "to_zip": "90002"})
+
+		self.assertEqual(seen, [85.0])
+
+	def test_a_document_with_no_tax_is_still_calculated_without_the_row(self):
+		"""An export removes the row and adds none. The totals without it are
+		final, and ERPNext's advance check still runs against them."""
+		doc = _make_doc(taxes=[_make_tax_row("Sales Tax - TC", TAXJAR_ROW_DESCRIPTION, 80.0)])
+
+		seen = self._calculated_tax_rows(doc, {"to_country": "CA", "to_zip": "M5V 2T6"})
+
+		self.assertEqual(seen, [0])
 
 
 # ── Phase 2: get_line_item_dict — product_tax_code resolution ────────────────

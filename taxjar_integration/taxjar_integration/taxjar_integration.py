@@ -1580,6 +1580,12 @@ def set_sales_tax(doc, method):
 		return
 
 	tax_dict = get_tax_data(doc)
+	# get_line_item_dict() adds each line's sales_tax once docstatus is 1, for
+	# the filing job after submit. Validate at submit runs at docstatus 1 too, so
+	# with it the request, and its fingerprint, differed from the one at save:
+	# _can_keep_stored_tax() failed on every submit and TaxJar was asked again.
+	for line in (tax_dict or {}).get("line_items") or []:
+		line.pop("sales_tax", None)
 
 	if not tax_dict:
 		log_taxjar_call(action="tax_for_order", status="skipped",
@@ -1657,7 +1663,8 @@ def set_sales_tax(doc, method):
 		if tax_data is not None:
 			frappe.cache().set_value(cache_key, tax_data, expires_in_sec=300)
 	if tax_data is not None and tax_data.amount_to_collect is not None:
-		_remove_taxjar_rows(doc, company_config)
+		# The totals are calculated once, below, with the new row in place.
+		_remove_taxjar_rows(doc, company_config, recalculate=False)
 
 		usd_rate = _get_usd_exchange_rate(doc)
 		tax_amount = flt(tax_data.amount_to_collect)
@@ -1970,15 +1977,22 @@ def strip_foreign_company_tax_rows(doc, method=None):
 	]
 
 
-def _remove_taxjar_rows(doc, company_config):
-	"""Remove all sales tax rows owned by TaxJar for this company and recalculate totals."""
+def _remove_taxjar_rows(doc, company_config, recalculate=True):
+	"""Remove all sales tax rows owned by TaxJar for this company and recalculate totals.
+
+	recalculate=False when the caller adds the new TaxJar row and calculates the
+	totals itself. Totals calculated without the row run ERPNext's advance check
+	against the net total, so an advance that also covers the tax stopped the
+	submit before the row came back.
+	"""
 	doc.taxes = [
 		tax for tax in doc.taxes
 		if tax.account_head != company_config.tax_account_head
 	]
 	_clear_breakdown_data(doc)
-	doc.run_method("calculate_taxes_and_totals")
-	doc.run_method("set_total_in_words")
+	if recalculate:
+		doc.run_method("calculate_taxes_and_totals")
+		doc.run_method("set_total_in_words")
 
 
 def _can_keep_stored_tax(doc, fingerprint, company_config):
