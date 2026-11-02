@@ -1,5 +1,5 @@
 ---
-title: "Install the TaxJar Integration app on your ERPNext site"
+title: "Installation"
 description: "Install the TaxJar Integration app on Frappe Cloud, with Docker or with bench, and see what the app adds to your ERPNext site when you install it."
 type: "how-to"
 ---

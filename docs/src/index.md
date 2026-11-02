@@ -1,6 +1,7 @@
 ---
 layout: home
-title: "TaxJar Integration for ERPNext"
+title: "US Sales Tax for ERPNext with TaxJar"
+titleTemplate: false
 description: "Calculate US sales tax on ERPNext quotations, orders and invoices with TaxJar, and send your invoices to TaxJar so that AutoFile files your returns."
 
 hero:

@@ -1,5 +1,5 @@
 ---
-title: "Scheduled Jobs: automatic updates and retries of the TaxJar app"
+title: "Scheduled Jobs"
 description: "The jobs that the TaxJar Integration runs on a schedule: the daily nexus update, the weekly category update, the 15-minute retries and the log cleanup."
 type: "reference"
 ---

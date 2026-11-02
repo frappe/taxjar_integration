@@ -1,5 +1,5 @@
 ---
-title: "API Log: read what TaxJar answered for each request"
+title: "TaxJar API Log"
 description: "Find the TaxJar API Log entries of one document or one company, read the request and the response, and set how many days the app keeps the logs."
 type: "how-to"
 ---

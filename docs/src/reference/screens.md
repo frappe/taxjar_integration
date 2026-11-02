@@ -1,5 +1,5 @@
 ---
-title: "TaxJar Pages & Settings: the TaxJar pages, fields and settings"
+title: "TaxJar Pages & Settings"
 description: "Each TaxJar page in the ERPNext sidebar, the TaxJar fields on ERPNext forms, and the labels in TaxJar Setup and the TaxJar Settings form."
 type: "reference"
 ---

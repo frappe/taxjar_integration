@@ -1,5 +1,5 @@
 ---
-title: "Customer Tax Exemption: exempt customers from sales tax, one or many"
+title: "Customer Tax Exemption"
 description: "Set a Wholesale, Government or Other exemption on one customer or on many customers, choose the exempt states, and check that TaxJar received it."
 type: "how-to"
 ---

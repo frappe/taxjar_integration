@@ -1,5 +1,5 @@
 ---
-title: "Address Validation: get company and customer addresses ready for tax"
+title: "Address Validation"
 description: "The address fields that TaxJar needs, how the app fills in and checks the US state code, the shipping address dialogs, and the company ship-from address."
 type: "how-to"
 ---

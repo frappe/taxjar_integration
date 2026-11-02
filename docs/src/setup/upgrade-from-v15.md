@@ -1,5 +1,5 @@
 ---
-title: "Upgrade from Version 15: upgrade from TaxJar version 15 and check older invoices"
+title: "Upgrade from Version 15"
 description: "What the upgrade from TaxJar version 15 changes, the setup steps after the upgrade, and how to check which older invoices TaxJar already holds."
 type: "how-to"
 ---

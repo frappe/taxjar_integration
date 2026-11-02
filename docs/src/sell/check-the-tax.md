@@ -1,5 +1,5 @@
 ---
-title: "Verify Tax Applicability: check the sales tax on a document"
+title: "Verify Tax Applicability"
 description: "Read the TaxJar tab and the TaxJar Tax Breakdown of a document to see why TaxJar charged the tax, which address set the rate, and the tax for each jurisdiction."
 type: "how-to"
 ---

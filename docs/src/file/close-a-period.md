@@ -1,5 +1,5 @@
 ---
-title: "Period Close & Filing: close a sales tax period and file the return"
+title: "Sales Tax Period Close & Filing"
 description: "Before each filing deadline, check on the Transaction Sync page that every invoice of the period is in TaxJar, then review the return in TaxJar."
 type: "how-to"
 ---

@@ -26,6 +26,10 @@ for p in SRC.rglob("*.md"):
 	# HTML ids, for example <li id="step-2-connect">.
 	anchors[route] |= set(re.findall(r'\bid="([\w-]+)"', text))
 
+# The full title is the frontmatter title and this suffix, unless the page sets
+# titleTemplate: false. Search results show about 60 characters.
+suffix = re.search(r"titleTemplate: ':title(.*)'", (ROOT / ".vitepress/config.mts").read_text()).group(1)
+
 errors = []
 for route, (p, text) in pages.items():
 	fm = re.match(r"^---\n(.*?)\n---\n", text, re.S)
@@ -35,6 +39,11 @@ for route, (p, text) in pages.items():
 	for key in ("title", "description"):
 		if not re.search(rf"^{key}: \".+\"$", fm.group(1), re.M):
 			errors.append(f"{p}: {key} missing or unquoted")
+	title = re.search(r'^title: "(.+)"$', fm.group(1), re.M)
+	if title:
+		full = title.group(1) + ("" if re.search(r"^titleTemplate: false$", fm.group(1), re.M) else suffix)
+		if len(full) > 60:
+			errors.append(f"{p}: title with suffix is {len(full)} characters, more than 60: {full}")
 	body = text[fm.end():]
 	last = 0
 	in_code = False

@@ -1,5 +1,5 @@
 ---
-title: "Additional Charges & Discounts: shipping, fees and discounts"
+title: "Shipping, Charges & Discounts"
 description: "Enter shipping in the shipping row, see how TaxJar treats other fees and negative rows, and use Additional Discount for a discount on the whole document."
 type: "how-to"
 ---

@@ -1,5 +1,5 @@
 ---
-title: "Guided Setup: connect TaxJar to ERPNext in six steps"
+title: "Guided Setup"
 description: "Do the six steps of TaxJar Setup: connect each company, map the ledgers, set the company address, turn on the features and load your nexus states."
 type: "how-to"
 ---

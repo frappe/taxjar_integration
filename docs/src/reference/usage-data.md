@@ -1,5 +1,5 @@
 ---
-title: "Usage Data & Feedback: the usage data that the app sends, and the feedback card"
+title: "Usage Data & Feedback"
 description: "The usage data that the TaxJar Integration sends to Frappe, the data that it never sends, how to turn usage data off, and when the feedback card shows."
 type: "reference"
 ---
