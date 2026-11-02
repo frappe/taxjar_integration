@@ -10,7 +10,5 @@ taxjar_integration/public/dist/
 taxjar_integration/taxjar_integration/demo_invoice.py
 .claude
 .agents
-/docs
 skills-lock.json
 /videos
-/docs-v2
