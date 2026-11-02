@@ -1942,17 +1942,24 @@ class TestSetSalesTaxTotalsCarryTheTaxRow(UnitTestCase):
 	_MODULE = "taxjar_integration.taxjar_integration.taxjar_integration"
 
 	def _calculated_tax_rows(self, doc, tax_dict):
-		"""set_sales_tax on doc; the TaxJar tax on doc at each calculation."""
+		"""set_sales_tax on doc; each step that reads the totals, with the TaxJar tax on doc then."""
 		tax_data = MagicMock(amount_to_collect=85.0)
 		tax_data.breakdown.line_items = []
 		tax_data.jurisdictions = MagicMock(state="CA", county="", city="")
 		seen = []
 
+		def taxjar_tax():
+			return sum(t.tax_amount for t in doc.taxes if t.account_head == "Sales Tax - TC")
+
 		def run_method(method):
 			if method == "calculate_taxes_and_totals":
-				seen.append(sum(t.tax_amount for t in doc.taxes if t.account_head == "Sales Tax - TC"))
+				seen.append(("totals", taxjar_tax()))
+
+		schedule = MagicMock()
+		schedule.return_value.validate_all_documents_schedule.side_effect = lambda: seen.append(("schedule", taxjar_tax()))
 
 		with patch.object(doc, "run_method", side_effect=run_method), \
+		     patch("erpnext.accounts.services.payment_schedule.PaymentScheduleService", schedule), \
 		     patch(f"{self._MODULE}.frappe.db.get_single_value", return_value=1), \
 		     patch(f"{self._MODULE}.get_region", return_value="United States"), \
 		     patch(f"{self._MODULE}.get_company_config", return_value=MagicMock(tax_account_head="Sales Tax - TC", shipping_account_head="Freight - TC")), \
@@ -1973,7 +1980,7 @@ class TestSetSalesTaxTotalsCarryTheTaxRow(UnitTestCase):
 
 		seen = self._calculated_tax_rows(doc, {"to_country": "US", "to_zip": "90002"})
 
-		self.assertEqual(seen, [85.0])
+		self.assertEqual(seen, [("totals", 85.0)])
 
 	def test_a_document_with_no_tax_is_still_calculated_without_the_row(self):
 		"""An export removes the row and adds none. The totals without it are
@@ -1982,7 +1989,26 @@ class TestSetSalesTaxTotalsCarryTheTaxRow(UnitTestCase):
 
 		seen = self._calculated_tax_rows(doc, {"to_country": "CA", "to_zip": "M5V 2T6"})
 
-		self.assertEqual(seen, [0])
+		self.assertEqual(seen, [("totals", 0)])
+
+	def test_the_payment_schedule_is_built_with_the_new_tax(self):
+		"""ERPNext builds the schedule in its own validate, before this hook. A
+		new invoice made and submitted in one step kept a schedule for the net
+		total and was submitted with it."""
+		doc = _make_doc(taxes=[])
+		doc.meta = _FakeMeta(fields=("payment_schedule",))
+
+		seen = self._calculated_tax_rows(doc, {"to_country": "US", "to_zip": "90002"})
+
+		self.assertEqual(seen, [("totals", 85.0), ("schedule", 85.0)])
+
+	def test_the_payment_schedule_is_built_when_the_tax_is_removed(self):
+		doc = _make_doc(taxes=[_make_tax_row("Sales Tax - TC", TAXJAR_ROW_DESCRIPTION, 80.0)])
+		doc.meta = _FakeMeta(fields=("payment_schedule",))
+
+		seen = self._calculated_tax_rows(doc, {"to_country": "CA", "to_zip": "M5V 2T6"})
+
+		self.assertEqual(seen, [("totals", 0), ("schedule", 0)])
 
 
 # ── Phase 2: get_line_item_dict — product_tax_code resolution ────────────────
