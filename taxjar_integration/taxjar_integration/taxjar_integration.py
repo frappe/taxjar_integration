@@ -1733,8 +1733,7 @@ def set_sales_tax(doc, method):
 		)
 		capture_once("taxjar_first_tax_calculated", days_since_setup=days_since_setup())
 
-		doc.run_method("calculate_taxes_and_totals")
-		doc.run_method("set_total_in_words")
+		_recalculate_totals(doc)
 
 
 def _address_country(address_name):
@@ -1991,8 +1990,25 @@ def _remove_taxjar_rows(doc, company_config, recalculate=True):
 	]
 	_clear_breakdown_data(doc)
 	if recalculate:
-		doc.run_method("calculate_taxes_and_totals")
-		doc.run_method("set_total_in_words")
+		_recalculate_totals(doc)
+
+
+def _recalculate_totals(doc):
+	"""Calculate the totals after the TaxJar row changed, and the payment schedule with them.
+
+	ERPNext builds the payment schedule from the grand total in its own
+	validate, which runs before this hook. Without a second build, a save that
+	adds or changes the tax kept a schedule for the old total. An invoice made
+	and submitted in one step was submitted with a schedule that left out the
+	tax. validate_all_documents_schedule() is ERPNext's own entry point, so
+	returns, POS and opening invoices are handled as ERPNext handles them.
+	"""
+	doc.run_method("calculate_taxes_and_totals")
+	doc.run_method("set_total_in_words")
+	if doc.meta.has_field("payment_schedule"):
+		from erpnext.accounts.services.payment_schedule import PaymentScheduleService
+
+		PaymentScheduleService(doc).validate_all_documents_schedule()
 
 
 def _can_keep_stored_tax(doc, fingerprint, company_config):
