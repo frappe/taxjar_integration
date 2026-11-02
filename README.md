@@ -1,8 +1,22 @@
+<div align="center">
+
+<img src="taxjar_integration/public/images/taxjar_logo.png" width="80" alt="TaxJar logo">
+
 # TaxJar Integration for ERPNext
 
-The TaxJar Integration calculates US sales tax on your ERPNext sales documents. It also sends your submitted invoices and credit notes to TaxJar, so that TaxJar AutoFile can file your sales tax returns.
+**US sales tax, powered by TaxJar**<br>
+Manage sales tax lifecycle from tax computation to return filing.
 
-![The TaxJar Integration workspace with the guided setup banner](.github/images/workspace.png)
+[![CI](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](license.txt)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
+[![ERPNext develop](https://img.shields.io/badge/ERPNext-develop-0089ff.svg)](https://github.com/frappe/erpnext)
+
+[Installation](#installation) · [Get started](#get-started) · [User guide](#user-guide)
+
+![US sales tax in ERPNext with TaxJar: customer exemption, Sales Invoice tax breakdown, print format, nexus and transaction sync](.github/images/overview.png)
+
+</div>
 
 ## Features
 
@@ -17,6 +31,12 @@ The TaxJar Integration calculates US sales tax on your ERPNext sales documents. 
 - **API log.** Each request to TaxJar and its response go into the TaxJar API Log.
 
 ## Screenshots
+
+### Workspace
+
+The TaxJar workspace shows the guided setup banner until the setup is complete.
+
+![The TaxJar Integration workspace with the guided setup banner](.github/images/workspace.png)
 
 ### Guided setup
 
