@@ -1,5 +1,5 @@
 ---
-title: "Updating your nexus in TaxJar and ERPNext"
+title: "Update Your Sales Tax Nexus"
 description: "Add a nexus state in TaxJar, update the nexus in ERPNext at once, and fix the daily nexus update when the notification says that it failed."
 type: "how-to"
 ---

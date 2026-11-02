@@ -1,5 +1,5 @@
 ---
-title: "Syncing to TaxJar: send sales invoices, credit and debit notes"
+title: "Syncing to TaxJar"
 description: "Send sales invoices, credit and debit notes to TaxJar on submit, check the sync status, see why some are excluded, and send a failed one again."
 type: "how-to"
 ---

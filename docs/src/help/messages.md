@@ -1,5 +1,5 @@
 ---
-title: "Messages & Errors: TaxJar messages with the cause and the fix"
+title: "Error Messages & Fixes"
 description: "Every message of the TaxJar Integration in one place: setup, saving a document, addresses, sync errors, credit notes, customers, access and the upgrade."
 type: "reference"
 ---

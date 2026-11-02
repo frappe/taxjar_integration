@@ -1,5 +1,5 @@
 ---
-title: "Resolve Failed Syncs: fix invoices and credit notes that did not sync"
+title: "Resolve Failed Syncs"
 description: "Find the failed transactions of a period, read each error, fix the cause, and send the transactions to TaxJar again with Resync or Sync to TaxJar."
 type: "how-to"
 ---

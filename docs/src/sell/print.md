@@ -1,5 +1,5 @@
 ---
-title: "Print Format: print a US sales tax invoice, credit or debit note"
+title: "Sales Tax Invoice Print Format"
 description: "Print sales invoices, credit notes and debit notes with the US Sales Tax print format, which shows the tax for each jurisdiction and the tax status line."
 type: "how-to"
 ---

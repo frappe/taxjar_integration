@@ -1,5 +1,5 @@
 ---
-title: "Glossary of TaxJar and US sales tax terms in these docs"
+title: "Sales Tax Glossary"
 description: "Short definitions of the sales tax and TaxJar terms in these docs, from AutoFile and nexus to exemption, product tax category, sync and Sandbox mode."
 type: "reference"
 ---

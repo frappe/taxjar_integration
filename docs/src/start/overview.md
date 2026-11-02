@@ -1,5 +1,5 @@
 ---
-title: "Introduction to US sales tax in ERPNext with TaxJar"
+title: "Introduction to US Sales Tax"
 description: "What TaxJar does for US sales tax: the rates of each jurisdiction, state nexus, product and customer exemptions, and return filing with AutoFile."
 type: "explanation"
 ---

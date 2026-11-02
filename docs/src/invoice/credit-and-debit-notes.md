@@ -1,5 +1,5 @@
 ---
-title: "Credit & Debit Notes: adjust a submitted sales invoice for TaxJar"
+title: "Credit & Debit Notes"
 description: "Make a credit note to give money back or a debit note to charge more. Both get sales tax on save and go to TaxJar on submit, with different rules."
 type: "how-to"
 ---

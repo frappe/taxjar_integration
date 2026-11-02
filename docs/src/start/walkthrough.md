@@ -1,5 +1,5 @@
 ---
-title: "Walkthrough of the TaxJar Integration in ERPNext"
+title: "Walkthrough Video"
 description: "A video of all TaxJar features in ERPNext, and a tour of the TaxJar workspace: setup, transactions, exemptions, and tax returns and liability."
 type: "tutorial"
 ---

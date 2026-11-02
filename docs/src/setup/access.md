@@ -1,5 +1,5 @@
 ---
-title: "Roles & Permissions: give people access to the TaxJar tasks"
+title: "Roles & Permissions"
 description: "Give each person the ERPNext roles for their TaxJar work, see the exact rights of each task and page, and build a custom role with fewer rights."
 type: "how-to"
 ---

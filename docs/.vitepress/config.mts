@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { withMermaid } from 'vitepress-plugin-mermaid'
+import { base, pageHead, siteUrl, writeDiscoveryFiles } from './seo'
+
+const description = 'US sales tax for ERPNext, calculated by TaxJar and filed with AutoFile.'
 
 // The sidebar follows the reader's journey: start, setting up, sales tax, transaction sync, sales adjustments,
 // tax exemptions, tax return filing, troubleshoot. Reference pages come last.
@@ -87,16 +90,25 @@ export default withMermaid(defineConfig({
 	// Parts are included into pages. They are not pages.
 	srcExclude: ['parts/**'],
 	title: 'TaxJar Integration',
-	description: 'US sales tax for ERPNext, calculated by TaxJar and filed with AutoFile.',
+	// Search results show about 60 characters of a title. The suffix holds the two
+	// words that people search with. scripts/lint.py reads it to check the length.
+	titleTemplate: ':title | TaxJar for ERPNext',
+	description,
+	lang: 'en-US',
+	base,
 	cleanUrls: true,
 	lastUpdated: false,
+	// Search and discovery: see seo.ts. The sitemap needs the public address.
+	sitemap: siteUrl ? { hostname: `${siteUrl}/` } : undefined,
+	transformHead: ({ pageData }) => pageHead(pageData),
+	buildEnd: (siteConfig) => writeDiscoveryFiles(siteConfig, sidebar, description),
 	// Content tabs: :::tabs with == Live and == Sandbox.
 	markdown: {
 		config(md) {
 			md.use(tabsMarkdownPlugin)
 		},
 	},
-	head: [['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }]],
+	head: [['link', { rel: 'icon', type: 'image/png', href: `${base}logo.png` }]],
 	themeConfig: {
 		logo: '/logo.png',
 		nav: [

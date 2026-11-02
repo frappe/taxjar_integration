@@ -1,5 +1,5 @@
 ---
-title: "Tax Computation: how sales tax is computed on ERPNext documents"
+title: "Sales Tax Computation"
 description: "When TaxJar calculates the tax, the data that it uses, why a document can have no tax, and what happens when a quotation becomes an order and an invoice."
 type: "explanation"
 ---

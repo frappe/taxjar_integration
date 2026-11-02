@@ -1,5 +1,5 @@
 ---
-title: "Before you go live: change from Sandbox mode to Live mode"
+title: "Switch from Sandbox to Live Mode"
 description: "Sandbox mode is for tests and TaxJar does not record its transactions. Change to Live mode, connect each company with its Live token, and check the result."
 type: "how-to"
 ---

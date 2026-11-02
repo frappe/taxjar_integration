@@ -56,7 +56,8 @@ These patterns come from the review of the docs in November 2026. Follow them on
 
 ## Page rules
 
-- Frontmatter: `title` (50 to 60 characters when possible), `description` (150 to 160 characters), `type`. Quote every value.
+- Frontmatter: `title`, `description` (150 to 160 characters), `type`. Quote every value.
+- `title` is the page name. Add a search word only when the name alone is not clear, for example "TaxJar API Log". VitePress adds " | TaxJar for ERPNext", and the full title is 60 characters or fewer. The home page has `titleTemplate: false`. The lint checks the length.
 - One H1. Then H2, H3, H4 in order.
 - A how-to page starts with "Pre-requisites" when the reader needs something first.
 - Callouts: `::: tip`, `::: warning`, `::: danger` (for data loss or a filed return only), `::: info`.
@@ -84,3 +85,11 @@ These patterns come from the review of the docs in November 2026. Follow them on
 | `/upgrade-from-version-15` | `/setup/upgrade-from-v15` |
 | `/usage-data-and-feedback` | `/reference/usage-data` |
 | (new) | `/reference/scheduled-jobs`, `/reference/glossary` |
+
+## Search and discovery
+
+- `.vitepress/seo.ts` adds the search and AI-agent files. Set `DOCS_URL` to the public address, with its path, when you build the public site: `DOCS_URL=https://<host>/<path> npm run docs:build`.
+- A build with `DOCS_URL` has canonical URLs, Open Graph tags, JSON-LD, `sitemap.xml` and a `robots.txt` that allows indexing.
+- A build without `DOCS_URL` is a preview. Each page has `noindex`, and `robots.txt` disallows all pages.
+- Every build writes `llms.txt`, `llms-full.txt` and a `.md` copy of each sidebar page for AI agents. A page that is not in the sidebar is not in these files.
+- Search engines show the `title` and the `description` from the frontmatter. Keep them in the lengths of "Page rules", with the words that a reader types into a search.

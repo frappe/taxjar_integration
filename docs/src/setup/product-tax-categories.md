@@ -1,5 +1,5 @@
 ---
-title: "Item Tax Exemption: set product tax categories on your items"
+title: "Item Tax Exemption & Product Categories"
 description: "Tell TaxJar how states tax each item with a product tax category, for example food, clothing or software. Set it on the item before you sell."
 type: "how-to"
 ---

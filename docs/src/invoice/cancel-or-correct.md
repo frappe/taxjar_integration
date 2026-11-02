@@ -1,5 +1,5 @@
 ---
-title: "Cancellations & Amendments: cancel or amend an invoice in TaxJar"
+title: "Invoice Cancellations & Amendments"
 description: "Choose between a credit note and a cancellation, cancel an invoice that TaxJar holds, and fix an invoice whose cancellation did not reach TaxJar."
 type: "how-to"
 ---

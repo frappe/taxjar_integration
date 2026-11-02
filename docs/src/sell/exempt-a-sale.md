@@ -1,5 +1,5 @@
 ---
-title: "Transaction Tax Exemption: exempt one sale from sales tax"
+title: "Transaction Tax Exemption"
 description: "Mark one quotation, sales order or sales invoice as exempt when the customer usually pays sales tax, and choose the reason for the exemption."
 type: "how-to"
 ---

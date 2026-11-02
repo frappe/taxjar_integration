@@ -1,5 +1,5 @@
 ---
-title: "No Sales Tax on a Document: fix missing or wrong sales tax"
+title: "No Sales Tax on a Document"
 description: "Find why a quotation, sales order or sales invoice has no sales tax from TaxJar, with the cause and the fix for each answer on the TaxJar tab."
 type: "how-to"
 ---
