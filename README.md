@@ -148,6 +148,8 @@ python scripts/audit_conventions.py
 4. Run the server tests and the client tests.
 5. Open a pull request against `develop`. Give the steps to reproduce the problem and the expected result.
 
+A fix that version 16 also needs gets the label `backport version-16`. When the pull request merges, a second pull request opens against `version-16` with the same commits.
+
 ## License
 
 MIT. Refer to [license.txt](license.txt).
