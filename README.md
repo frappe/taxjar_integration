@@ -7,10 +7,10 @@
 **US sales tax, powered by TaxJar**<br>
 Manage sales tax lifecycle from tax computation to return filing.
 
-[![CI](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml)
+[![CI](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml/badge.svg?branch=version-16)](https://github.com/frappe/taxjar_integration/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](license.txt)
 [![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue.svg)](pyproject.toml)
-[![ERPNext develop](https://img.shields.io/badge/ERPNext-develop-0089ff.svg)](https://github.com/frappe/erpnext)
+[![ERPNext version-16](https://img.shields.io/badge/ERPNext-version--16-0089ff.svg)](https://github.com/frappe/erpnext)
 [![GitHub stars](https://img.shields.io/github/stars/frappe/taxjar_integration?style=social)](https://github.com/frappe/taxjar_integration/stargazers)
 
 [Installation](#installation) · [Get started](#get-started) · [User guide](#user-guide)
@@ -73,7 +73,7 @@ The customer page shows the exemption and the sync status of each customer.
 
 ## Requirements
 
-- Frappe Framework and ERPNext, the `develop` branch.
+- Frappe Framework 16.50.0 or later and ERPNext 16.52.0 or later, on the `version-16` branch.
 - Python 3.14 or later.
 - A TaxJar account and an API token for each company. Sign up at [app.taxjar.com](https://app.taxjar.com/api_sign_up).
 - A company with the country "United States". TaxJar calculates US sales tax only.
@@ -83,7 +83,7 @@ The customer page shows the exemption and the sync status of each customer.
 Run these commands in your bench folder:
 
 ```bash
-bench get-app https://github.com/frappe/taxjar_integration
+bench get-app --branch version-16 https://github.com/frappe/taxjar_integration
 bench --site <site-name> install-app taxjar_integration
 bench --site <site-name> migrate
 ```

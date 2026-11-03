@@ -3,11 +3,11 @@ name: CI
 on:
   push:
     branches:
-      - develop
+      - version-16
   pull_request:
 
 concurrency:
-  group: develop-taxjar_integration-${{ github.event.number }}
+  group: version-16-taxjar_integration-${{ github.event.number }}
   cancel-in-progress: true
 
 jobs:
@@ -170,7 +170,7 @@ jobs:
       - name: Setup
         run: |
           pip install frappe-bench
-          bench init --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          bench init --frappe-branch version-16 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
@@ -178,12 +178,12 @@ jobs:
       # the app reads erpnext for get_region, get_exchange_rate and the
       # company defaults. Without it, install-app stopped with "No module
       # named 'erpnext'". --skip-assets leaves the asset build to the single
-      # `bench build` below, rather than running it twice. --branch develop
+      # `bench build` below, rather than running it twice. --branch version-16
       # matches the frappe that bench init cloned.
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
-          bench get-app --branch develop --skip-assets erpnext
+          bench get-app --branch version-16 --skip-assets erpnext
           bench get-app taxjar_integration $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
