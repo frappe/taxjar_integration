@@ -7,6 +7,10 @@
 	the optional detailed jurisdiction breakdown. The item rows carried a
 	per-line Taxable/Exempt tag until 2026-09-30; it read the item's tax
 	category code, which says nothing about whether the line was taxed.
+
+	The Quotation and Sales Order formats include this file. Only the title,
+	the number label and the dates read the doctype; a field that one
+	doctype does not have is undefined in Jinja, so its row drops out.
 #}
 <style>
 	{% include "taxjar_integration/taxjar_integration/print_format/us_sales_tax_(invoice,_dn,_cn)/us_sales_tax_(invoice,_dn,_cn).css" %}
@@ -60,7 +64,9 @@
 
 	<div class="text-center taxjar-doc-title">
 		<h2>
-			{% if doc.is_return %}{{ _("Credit Note") }}
+			{% if doc.doctype == "Quotation" %}{{ _("Quotation") }}
+			{% elif doc.doctype == "Sales Order" %}{{ _("Sales Order") }}
+			{% elif doc.is_return %}{{ _("Credit Note") }}
 			{% elif doc.is_debit_note %}{{ _("Debit Note") }}
 			{% else %}{{ _("Sales Invoice") }}
 			{% endif %}
@@ -98,13 +104,19 @@
 					<div class="taxjar-party-body">
 						<div class="info-text text-bold">{{ doc.company }}</div>
 						{% if doc.company_address_display %}<div class="info-text">{{ clean_address(doc.company_address_display) }}</div>{% endif %}
-						{% if doc.company_tax_id %}<div class="info-text taxjar-tax-id"><span class="title">{{ _("Tax ID") }}:</span> {{ doc.company_tax_id }}</div>{% endif %}
+						{# Quotation and Sales Order have no company_tax_id field; the Company has the value. #}
+						{% set company_tax_id = doc.company_tax_id if doc.meta.has_field("company_tax_id") else frappe.db.get_value("Company", doc.company, "tax_id") %}
+						{% if company_tax_id %}<div class="info-text taxjar-tax-id"><span class="title">{{ _("Tax ID") }}:</span> {{ company_tax_id }}</div>{% endif %}
 					</div>
 				</td>
 				<td class="taxjar-doc-details-cell" style="width: 50%">
 					<table class="taxjar-doc-details">
 						{# Same order of checks as the document title above. #}
-						{% if doc.is_return %}
+						{% if doc.doctype == "Quotation" %}
+							{% set number_label = _("Quotation Number") %}
+						{% elif doc.doctype == "Sales Order" %}
+							{% set number_label = _("Sales Order Number") %}
+						{% elif doc.is_return %}
 							{% set number_label = _("Credit Note No.") %}
 						{% elif doc.is_debit_note %}
 							{% set number_label = _("Debit Note No.") %}
@@ -130,9 +142,21 @@
 						{% endif %}
 						<tr>
 							<td class="title">{{ _("Date") }}</td>
-							<td class="info-text text-right">{{ doc.get_formatted("posting_date") }}</td>
+							<td class="info-text text-right">{{ doc.get_formatted("posting_date" if doc.doctype == "Sales Invoice" else "transaction_date") }}</td>
 						</tr>
-						{% if doc.due_date %}
+						{% if doc.doctype == "Quotation" and doc.valid_till %}
+						<tr>
+							<td class="title">{{ _("Valid Till") }}</td>
+							<td class="info-text text-right">{{ doc.get_formatted("valid_till") }}</td>
+						</tr>
+						{% endif %}
+						{% if doc.doctype == "Sales Order" and doc.delivery_date %}
+						<tr>
+							<td class="title">{{ _("Delivery Date") }}</td>
+							<td class="info-text text-right">{{ doc.get_formatted("delivery_date") }}</td>
+						</tr>
+						{% endif %}
+						{% if doc.doctype == "Sales Invoice" and doc.due_date %}
 						<tr>
 							<td class="title">{{ _("Due Date") }}</td>
 							<td class="info-text text-right">{{ doc.get_formatted("due_date") }}</td>
