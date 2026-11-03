@@ -2006,9 +2006,7 @@ def _recalculate_totals(doc):
 	doc.run_method("calculate_taxes_and_totals")
 	doc.run_method("set_total_in_words")
 	if doc.meta.has_field("payment_schedule"):
-		from erpnext.accounts.services.payment_schedule import PaymentScheduleService
-
-		PaymentScheduleService(doc).validate_all_documents_schedule()
+		doc.validate_all_documents_schedule()
 
 
 def _can_keep_stored_tax(doc, fingerprint, company_config):

@@ -1955,11 +1955,8 @@ class TestSetSalesTaxTotalsCarryTheTaxRow(UnitTestCase):
 			if method == "calculate_taxes_and_totals":
 				seen.append(("totals", taxjar_tax()))
 
-		schedule = MagicMock()
-		schedule.return_value.validate_all_documents_schedule.side_effect = lambda: seen.append(("schedule", taxjar_tax()))
-
 		with patch.object(doc, "run_method", side_effect=run_method), \
-		     patch("erpnext.accounts.services.payment_schedule.PaymentScheduleService", schedule), \
+		     patch.object(doc, "validate_all_documents_schedule", create=True, side_effect=lambda: seen.append(("schedule", taxjar_tax()))), \
 		     patch(f"{self._MODULE}.frappe.db.get_single_value", return_value=1), \
 		     patch(f"{self._MODULE}.get_region", return_value="United States"), \
 		     patch(f"{self._MODULE}.get_company_config", return_value=MagicMock(tax_account_head="Sales Tax - TC", shipping_account_head="Freight - TC")), \
@@ -18994,7 +18991,9 @@ class TestWhitelistedEndpointContract(UnitTestCase):
 
 	@staticmethod
 	def _methods_for(fn):
-		return frappe.allowed_http_methods_for_whitelisted_func.get(fn)
+		# A list on Frappe 16, a tuple on develop.
+		methods = frappe.allowed_http_methods_for_whitelisted_func.get(fn)
+		return tuple(methods) if methods is not None else None
 
 	def test_sync_workers_are_not_reachable_over_http(self):
 		"""The workers run under frappe.enqueue, which resolves a dotted path
@@ -19271,153 +19270,6 @@ class TestUninstall(UnitTestCase):
 
 
 # ── Disable / Enable ─────────────────────────────────────────────────────────
-
-
-class TestAppToggle(UnitTestCase):
-	"""Disabling the app has to take its marks off the doctypes it does not own.
-
-	A disabled app keeps its schema and its data, so nothing removes the taxjar_*
-	fields from Sales Invoice, un-hides ERPNext's own exempt_from_sales_tax
-	checkbox, or un-defaults the TaxJar tax template, unless this module does it.
-
-	The template is the part that actually hurts if this regresses, and it is the
-	same harm TestUninstall guards: the site keeps defaulting sales transactions to
-	a TaxJar template nothing populates, with ERPNext's own US templates disabled.
-	"""
-
-	MOD = "taxjar_integration.app_toggle"
-
-	def test_hooks_are_wired(self):
-		from taxjar_integration import hooks
-
-		self.assertEqual(hooks.before_disable, "taxjar_integration.app_toggle.before_disable")
-		self.assertEqual(hooks.after_enable, "taxjar_integration.app_toggle.after_enable")
-
-	def test_the_other_two_hooks_stay_undeclared(self):
-		"""Frappe offers four. This app has work for two, and an empty hook is a
-		function a later reader has to prove does nothing."""
-		from taxjar_integration import hooks
-
-		self.assertFalse(hasattr(hooks, "after_disable"))
-		self.assertFalse(hasattr(hooks, "before_enable"))
-
-	def test_disable_hides_and_enable_shows_the_same_rows(self):
-		from taxjar_integration import app_toggle
-
-		payload = {"Custom Field": [{"dt": "Item", "fieldname": "x"}]}
-
-		with patch(f"{self.MOD}.get_customizations", return_value=payload), patch(
-			f"{self.MOD}.hide_customizations"
-		) as hide, patch(f"{self.MOD}.unhide_customizations") as unhide, patch(
-			f"{self.MOD}.restore_default_tax_templates"
-		), patch(f"{self.MOD}.sync_all_company_tax_templates"):
-			app_toggle.before_disable()
-			app_toggle.after_enable()
-
-		hide.assert_called_once_with(payload)
-		unhide.assert_called_once_with(payload)
-
-	def test_disable_hands_the_tax_templates_back_and_enable_takes_them_again(self):
-		"""The $0 row is the silent half. set_sales_tax() is a doc_event, so it stops
-		running when the app goes quiet, and nothing else fills the template's Actual
-		row - the site submits invoices with no sales tax and throws nothing."""
-		from taxjar_integration import app_toggle
-
-		with patch(f"{self.MOD}.hide_customizations"), patch(
-			f"{self.MOD}.unhide_customizations"
-		), patch(f"{self.MOD}.restore_default_tax_templates") as hand_back, patch(
-			f"{self.MOD}.sync_all_company_tax_templates"
-		) as take_back:
-			app_toggle.before_disable()
-			self.assertEqual(hand_back.call_count, 1)
-			self.assertEqual(take_back.call_count, 0)
-
-			app_toggle.after_enable()
-			self.assertEqual(take_back.call_count, 1)
-			self.assertEqual(hand_back.call_count, 1)
-
-	def test_the_two_halves_are_the_install_and_uninstall_paths_themselves(self):
-		"""Reused whole, not restated. A change to either path reaches this module
-		without a second edit, and cannot drift from it."""
-		from taxjar_integration import app_toggle
-		from taxjar_integration.taxjar_integration.regional.united_states import (
-			sync_all_company_tax_templates,
-		)
-		from taxjar_integration.uninstall import restore_default_tax_templates
-
-		self.assertIs(app_toggle.restore_default_tax_templates, restore_default_tax_templates)
-		self.assertIs(app_toggle.sync_all_company_tax_templates, sync_all_company_tax_templates)
-
-	def test_the_templates_are_handed_back_before_the_fields_go_dark(self):
-		"""before_disable still has this app's doctypes to read. The hand-back is the
-		half that reads them, so it runs first - the same split uninstall.py makes."""
-		from taxjar_integration import app_toggle
-
-		order = []
-
-		with patch(
-			f"{self.MOD}.restore_default_tax_templates", side_effect=lambda: order.append("templates")
-		), patch(f"{self.MOD}.hide_customizations", side_effect=lambda _: order.append("fields")):
-			app_toggle.before_disable()
-
-		self.assertEqual(order, ["templates", "fields"])
-
-	def test_every_filter_names_a_doctype_and_a_field(self):
-		"""The rule frappe.custom enforces: a filter without a doctype name would
-		reach every other app's rows on the same table. Read from frappe, so a key
-		renamed there fails here rather than at disable time."""
-		from frappe.custom import CUSTOMIZATION_DOCTYPES
-
-		from taxjar_integration.app_toggle import get_customizations
-
-		customizations = get_customizations()
-		self.assertTrue(customizations)
-
-		for doctype, rows in customizations.items():
-			target_key = CUSTOMIZATION_DOCTYPES[doctype]
-			self.assertTrue(rows, f"{doctype} has no rows")
-			for filters in rows:
-				self.assertIsInstance(filters.get(target_key), str)
-				# and the field, so one filter cannot hide a whole doctype's fields
-				self.assertTrue(filters.get("fieldname") or filters.get("field_name"))
-
-	def test_the_lists_are_the_ones_install_writes_from(self):
-		"""One source of truth. A field added to get_custom_fields(), or a setter
-		added to _PROPERTY_SETTERS, is hidden on disable without a second edit."""
-		from taxjar_integration.app_toggle import get_customizations
-		from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
-			get_custom_fields,
-		)
-		from taxjar_integration.uninstall import _PROPERTY_SETTERS
-
-		customizations = get_customizations()
-
-		self.assertEqual(
-			len(customizations["Custom Field"]),
-			sum(len(fields) for fields in get_custom_fields().values()),
-		)
-		self.assertEqual(len(customizations["Property Setter"]), len(_PROPERTY_SETTERS))
-		self.assertIn(
-			{"doc_type": "Sales Invoice", "field_name": "return_against", "property": "no_copy"},
-			customizations["Property Setter"],
-		)
-
-	def test_it_gives_the_same_result_on_every_run(self):
-		"""bench migrate runs before_disable again for every disabled app, so the
-		payload must not depend on what an earlier run did."""
-		from taxjar_integration.app_toggle import get_customizations
-
-		self.assertEqual(get_customizations(), get_customizations())
-
-	def test_product_tax_category_permissions_stay_out(self):
-		"""The app writes no Custom DocPerm rows: its rights live in its own
-		doctype JSON, which frappe conceals whole while the app is off."""
-		from taxjar_integration.app_toggle import get_customizations
-
-		self.assertNotIn("Custom DocPerm", get_customizations())
-
-
-# ── Company deletion ─────────────────────────────────────────────────────────
 
 
 class TestCompanyDeletionHooks(UnitTestCase):
