@@ -20,12 +20,12 @@ Product version: the TaxJar Integration app for ERPNext version 16, commit `5217
 
 | Fact | Owner page |
 |---|---|
-| Every message and error, with its fix | `/help/messages` |
-| Sync statuses and exclusion reasons | `/invoice/how-sync-works#sync-statuses` |
-| Roles and the rights for each task | `/setup/access` |
+| Every message and error, with its fix | `/troubleshoot/messages-and-errors` |
+| Sync statuses and exclusion reasons | `/transaction-sync/syncing-to-taxjar#sync-statuses` |
+| Roles and the rights for each task | `/setting-up/roles-and-permissions` |
 | Schedules: nexus update, category update, retries, log cleanup | `/reference/scheduled-jobs` |
-| What TaxJar uses to calculate the tax | `/sell/how-tax-is-calculated` |
-| Live mode and Sandbox mode | `/setup/go-live` |
+| What TaxJar uses to calculate the tax | `/sales-tax/tax-computation` |
+| Live mode and Sandbox mode | `/setting-up/before-you-go-live` |
 
 ## Terms
 
@@ -72,18 +72,18 @@ These patterns come from the review of the docs in November 2026. Follow them on
 
 | Old page (`docs/content/`) | New page or pages |
 |---|---|
-| `/` (index) | `/`, `/start/overview` |
-| `/before-you-start` | `/setup/guided-setup#pre-requisites`, `/setup/go-live` |
-| `/guided-setup` | `/setup/guided-setup` |
-| `/nexus-and-product-categories` | `/setup/nexus`, `/setup/product-tax-categories` |
-| `/customer-exemptions` | `/sell/exempt-customers` |
-| `/sales-tax-on-documents` | `/sell/how-tax-is-calculated`, `/sell/check-the-tax`, `/setup/address-validation`, `/sell/exempt-a-sale`, `/sell/extra-charges`, `/sell/print` |
-| `/invoices-and-credit-notes` | `/invoice/how-sync-works`, `/invoice/credit-and-debit-notes`, `/invoice/cancel-or-correct` |
-| `/period-close-and-filing` | `/file/close-a-period`, `/file/fix-failed-syncs` |
-| `/troubleshooting` | `/help/no-sales-tax`, `/help/messages`, `/help/api-log`, `/reference/screens` |
-| `/roles-and-permissions` | `/setup/access` |
-| `/upgrade-from-version-15` | `/setup/upgrade-from-v15` |
-| `/usage-data-and-feedback` | `/reference/usage-data` |
+| `/` (index) | `/`, `/getting-started/introduction` |
+| `/before-you-start` | `/setting-up/guided-setup#pre-requisites`, `/setting-up/before-you-go-live` |
+| `/guided-setup` | `/setting-up/guided-setup` |
+| `/nexus-and-product-categories` | `/setting-up/updating-your-nexus`, `/tax-exemptions/item-tax-exemption` |
+| `/customer-exemptions` | `/tax-exemptions/customer-tax-exemption` |
+| `/sales-tax-on-documents` | `/sales-tax/tax-computation`, `/sales-tax/verify-tax-applicability`, `/setting-up/address-validation`, `/tax-exemptions/transaction-tax-exemption`, `/sales-tax/additional-charges-and-discounts`, `/sales-tax/print-format` |
+| `/invoices-and-credit-notes` | `/transaction-sync/syncing-to-taxjar`, `/sales-adjustments/credit-and-debit-notes`, `/sales-adjustments/cancellations-and-amendments` |
+| `/period-close-and-filing` | `/tax-return-filing/period-close-and-filing`, `/transaction-sync/resolve-failed-syncs` |
+| `/troubleshooting` | `/troubleshoot/missing-sales-tax`, `/troubleshoot/messages-and-errors`, `/troubleshoot/api-log`, `/reference/taxjar-pages-and-settings` |
+| `/roles-and-permissions` | `/setting-up/roles-and-permissions` |
+| `/upgrade-from-version-15` | `/reference/upgrade-from-version-15` |
+| `/usage-data-and-feedback` | `/reference/usage-data-and-feedback` |
 | (new) | `/reference/scheduled-jobs`, `/reference/glossary` |
 
 ## Search and discovery
