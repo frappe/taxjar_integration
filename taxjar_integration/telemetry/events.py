@@ -160,8 +160,7 @@ EVENTS = {
 		"nexus_regions": int,
 	},
 	"taxjar_company_removed": {},
-	# The app turned off or removed: a strong sign that something went wrong.
-	"taxjar_app_disabled": {},
+	# The app removed: a strong sign that something went wrong.
 	"taxjar_app_uninstalled": {},
 	# Activation: once per site.
 	"taxjar_first_tax_calculated": {"days_since_setup": int},
