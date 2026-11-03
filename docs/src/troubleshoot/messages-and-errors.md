@@ -96,12 +96,12 @@ These show as the **Sync Error** of an invoice or a credit note. An error that e
 
 | Message | Fix |
 |---|---|
-| Nothing to Sync To | No company of this customer uses TaxJar. Check the companies in TaxJar Setup, and **Restrict to Companies** on the customer. |
-| Company Not Allowed | The customer does not sync to this company. Check **Restrict to Companies** on the customer. |
+| Nothing to Sync To | No company uses TaxJar. Check the companies in TaxJar Setup. |
+| Company Not Allowed | The company does not use TaxJar. Check the companies in TaxJar Setup. |
 | Customer Not Deleted | TaxJar could not remove the customer. Wait, then delete the customer again. |
 | Not Sent | The customer waited too long in the queue. Select the row and click **Resync with TaxJar**. |
 | Exempt Region Required | Select at least one exempt region, or click **Select All**. |
-| …exemption details were saved but not sent to TaxJar. | TaxJar is off, no company uses TaxJar, or the customer is restricted to companies that do not use TaxJar. Fix the cause, then send the customer again. |
+| …exemption details were saved but not sent to TaxJar. | TaxJar is off, or no company uses TaxJar. Fix the cause, then send the customer again. |
 
 ## Access Messages
 

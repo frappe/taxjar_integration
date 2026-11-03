@@ -12,7 +12,6 @@ The app runs these jobs on a schedule. You do not start them.
 |---|---|---|:-:|
 | **Every 15 Minutes** | Invoice Retry | Sends failed invoices and cancellations again, when the error is temporary. | - |
 |  | Customer Retry | Sends failed customers again, when the error is temporary. A customer that waited more than 15 minutes in the queue becomes Failed first. | - |
-|  | Customer Removal | Removes customers from the TaxJar account of a company that you took off **Restrict to Companies**. | - |
 | **Daily** | Nexus Update | Gets the nexus states of each company from TaxJar. On a failure, it sends a notification to the TaxJar users. Refer to [Daily Update Failure](/setting-up/updating-your-nexus#daily-update-failure). | - |
 |  | Log Cleanup | Deletes the TaxJar API Log entries that are older than **Retention**. With 0, it keeps all entries. | ● |
 |  | Usage Summary | Sends a summary of the use of the app, only when usage data is on. Refer to [Usage Data & Feedback](/reference/usage-data-and-feedback). | ● |

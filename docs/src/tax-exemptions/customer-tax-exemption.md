@@ -71,16 +71,7 @@ If a customer shows **Failed**, refer to [Resolve Failed Syncs](/transaction-syn
 
 ## Multi-Company Customers
 
-The app sends the customer to the TaxJar account of each TaxJar company, unless **Restrict to Companies** is set on the customer.
-
-| Restrict to Companies | The app sends the customer to |
-|---|---|
-| **Empty** | Every TaxJar company |
-| **Set** | Only the companies in the list |
-
-::: info Removing a company
-When you remove a company from **Restrict to Companies**, the app removes the customer from the TaxJar account of that company.
-:::
+The app sends the customer to the TaxJar account of each TaxJar company.
 
 To send one customer to one company again:
 

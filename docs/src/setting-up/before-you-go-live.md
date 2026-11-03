@@ -63,10 +63,8 @@ A company that has no token for the current mode gets no tax, and its invoices d
 
 ## Turn Off the App
 
-There are two ways to stop TaxJar for all companies.
+To stop TaxJar for all companies:
 
-::::tabs
-== Clear Enable TaxJar
 1. Open **TaxJar API Settings**.
 2. Clear **Enable TaxJar**, and save.
 
@@ -77,17 +75,3 @@ Then:
 - Invoices that you submit get the status **Excluded**.
 - The TaxJar Sales Tax template is no longer the default template.
 - The standard templates "US ST 6%", "US ST 4%" and "US ST 6.25%" stay disabled.
-== Disable the App
-When you disable the TaxJar Integration app on the site:
-
-- The app hides its fields. It does not delete your data.
-- The TaxJar Sales Tax template is no longer the default template.
-- The app enables "US ST 6%", "US ST 4%" and "US ST 6.25%" again.
-- The scheduled jobs stop.
-
-::: warning Select a default tax template
-After you disable the app, no sales tax template is the default. Select a default **Sales Taxes and Charges Template** for each company.
-:::
-
-When you enable the app again, the fields and the default template come back.
-::::
