@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import frappe
 
@@ -422,6 +423,15 @@ def set_default_print_format(doctypes=None):
 # - Grey" without the document type and number. Every print format prints its
 # own title, so the header suits any document.
 LETTER_HEAD = "US Company Letter Head"
+# A fixed path inside the app, the same way taxjar_settings.py reads its
+# product tax categories: nothing a caller passes can change it.
+LETTER_HEAD_FILE = (
+	Path(__file__).resolve().parent
+	/ "taxjar_integration"
+	/ "letter_head"
+	/ "us_company_letter_head"
+	/ "us_company_letter_head.json"
+).resolve()
 LETTER_HEAD_SAVEPOINT = "taxjar_default_letter_head"
 
 
@@ -468,9 +478,7 @@ def _insert_letter_head():
 	if meta.has_field("standard") or frappe.db.exists("Letter Head", {"name": LETTER_HEAD}):
 		return
 
-	folder = frappe.scrub(LETTER_HEAD)
-	with open(frappe.get_module_path("TaxJar Integration", "letter_head", folder, f"{folder}.json")) as f:
-		data = json.load(f)
+	data = json.loads(LETTER_HEAD_FILE.read_text(encoding="utf-8"))
 	values = {key: value for key, value in data.items() if meta.has_field(key)}
 	frappe.get_doc({"doctype": "Letter Head", **values}).insert(ignore_permissions=True)
 
