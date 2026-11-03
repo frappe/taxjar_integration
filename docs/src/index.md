@@ -14,10 +14,10 @@ hero:
   actions:
     - theme: brand
       text: "Get Started"
-      link: /start/overview
+      link: /getting-started/introduction
     - theme: alt
       text: "Watch Walkthrough"
-      link: /start/walkthrough#sales-tax-lifecycle
+      link: /getting-started/walkthrough#sales-tax-lifecycle
 
 features:
   - icon:

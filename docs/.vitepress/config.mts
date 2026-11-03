@@ -11,64 +11,64 @@ const sidebar = [
 	{
 		text: 'Getting Started',
 		items: [
-			{ text: 'Introduction', link: '/start/overview' },
-			{ text: 'Walkthrough', link: '/start/walkthrough' },
-			{ text: 'Installation', link: '/start/installation' },
+			{ text: 'Introduction', link: '/getting-started/introduction' },
+			{ text: 'Walkthrough', link: '/getting-started/walkthrough' },
+			{ text: 'Installation', link: '/getting-started/installation' },
 		],
 	},
 	{
 		text: 'Setting Up',
 		items: [
-			{ text: 'Guided Setup', link: '/setup/guided-setup' },
-			{ text: 'Roles & Permissions', link: '/setup/access' },
-			{ text: 'Updating your nexus', link: '/setup/nexus' },
-			{ text: 'Address Validation', link: '/setup/address-validation' },
-			{ text: 'Before you go live', link: '/setup/go-live' },
+			{ text: 'Guided Setup', link: '/setting-up/guided-setup' },
+			{ text: 'Roles & Permissions', link: '/setting-up/roles-and-permissions' },
+			{ text: 'Updating your nexus', link: '/setting-up/updating-your-nexus' },
+			{ text: 'Address Validation', link: '/setting-up/address-validation' },
+			{ text: 'Before you go live', link: '/setting-up/before-you-go-live' },
 		],
 	},
 	{
 		text: 'Sales Tax',
 		items: [
-			{ text: 'Tax Computation', link: '/sell/how-tax-is-calculated' },
-			{ text: 'Verify Tax Applicability', link: '/sell/check-the-tax' },
-			{ text: 'Additional Charges & Discounts', link: '/sell/extra-charges' },
-			{ text: 'Print Format', link: '/sell/print' },
+			{ text: 'Tax Computation', link: '/sales-tax/tax-computation' },
+			{ text: 'Verify Tax Applicability', link: '/sales-tax/verify-tax-applicability' },
+			{ text: 'Additional Charges & Discounts', link: '/sales-tax/additional-charges-and-discounts' },
+			{ text: 'Print Format', link: '/sales-tax/print-format' },
 		],
 	},
 	{
 		text: 'Transaction Sync',
 		items: [
-			{ text: 'Syncing to TaxJar', link: '/invoice/how-sync-works' },
-			{ text: 'Resolve Failed Syncs', link: '/file/fix-failed-syncs' },
+			{ text: 'Syncing to TaxJar', link: '/transaction-sync/syncing-to-taxjar' },
+			{ text: 'Resolve Failed Syncs', link: '/transaction-sync/resolve-failed-syncs' },
 		],
 	},
 	{
 		text: 'Sales Adjustments',
 		items: [
-			{ text: 'Credit & Debit Notes', link: '/invoice/credit-and-debit-notes' },
-			{ text: 'Cancellations & Amendments', link: '/invoice/cancel-or-correct' },
+			{ text: 'Credit & Debit Notes', link: '/sales-adjustments/credit-and-debit-notes' },
+			{ text: 'Cancellations & Amendments', link: '/sales-adjustments/cancellations-and-amendments' },
 		],
 	},
 	{
 		text: 'Tax Exemptions',
 		items: [
-			{ text: 'Customer Tax Exemption', link: '/sell/exempt-customers' },
-			{ text: 'Transaction Tax Exemption', link: '/sell/exempt-a-sale' },
-			{ text: 'Item Tax Exemption', link: '/setup/product-tax-categories' },
+			{ text: 'Customer Tax Exemption', link: '/tax-exemptions/customer-tax-exemption' },
+			{ text: 'Transaction Tax Exemption', link: '/tax-exemptions/transaction-tax-exemption' },
+			{ text: 'Item Tax Exemption', link: '/tax-exemptions/item-tax-exemption' },
 		],
 	},
 	{
 		text: 'Tax Return Filing',
 		items: [
-			{ text: 'Period Close & Filing', link: '/file/close-a-period' },
+			{ text: 'Period Close & Filing', link: '/tax-return-filing/period-close-and-filing' },
 		],
 	},
 	{
 		text: 'Troubleshoot',
 		items: [
-			{ text: 'No Sales Tax on a Document', link: '/help/no-sales-tax' },
-			{ text: 'Messages & Errors', link: '/help/messages' },
-			{ text: 'API Log', link: '/help/api-log' },
+			{ text: 'Missing Sales Tax', link: '/troubleshoot/missing-sales-tax' },
+			{ text: 'Messages & Errors', link: '/troubleshoot/messages-and-errors' },
+			{ text: 'API Log', link: '/troubleshoot/api-log' },
 		],
 	},
 	{
@@ -76,9 +76,9 @@ const sidebar = [
 		collapsed: true,
 		items: [
 			{ text: 'Scheduled Jobs', link: '/reference/scheduled-jobs' },
-			{ text: 'TaxJar Pages & Settings', link: '/reference/screens' },
-			{ text: 'Upgrade from Version 15', link: '/setup/upgrade-from-v15' },
-			{ text: 'Usage Data & Feedback', link: '/reference/usage-data' },
+			{ text: 'TaxJar Pages & Settings', link: '/reference/taxjar-pages-and-settings' },
+			{ text: 'Upgrade from Version 15', link: '/reference/upgrade-from-version-15' },
+			{ text: 'Usage Data & Feedback', link: '/reference/usage-data-and-feedback' },
 			{ text: 'Glossary', link: '/reference/glossary' },
 		],
 	},
@@ -104,6 +104,12 @@ export default withMermaid(defineConfig({
 	buildEnd: (siteConfig) => writeDiscoveryFiles(siteConfig, sidebar, description),
 	// Content tabs: :::tabs with == Live and == Sandbox.
 	markdown: {
+		// A ::: tip or ::: info with no title shows an icon in place of the word
+		// "TIP" or "INFO". See custom.css.
+		container: {
+			tipLabel: '<span class="tip-icon" role="img" aria-label="Tip"></span>',
+			infoLabel: '<span class="tip-icon info-icon" role="img" aria-label="Info"></span>',
+		},
 		config(md) {
 			md.use(tabsMarkdownPlugin)
 		},
@@ -112,8 +118,8 @@ export default withMermaid(defineConfig({
 	themeConfig: {
 		logo: '/logo.png',
 		nav: [
-			{ text: 'Setting Up', link: '/setup/guided-setup' },
-			{ text: 'Troubleshoot', link: '/help/messages' },
+			{ text: 'Setting Up', link: '/setting-up/guided-setup' },
+			{ text: 'Troubleshoot', link: '/troubleshoot/messages-and-errors' },
 		],
 		sidebar,
 		outline: { level: [2, 3], label: 'On this page' },
