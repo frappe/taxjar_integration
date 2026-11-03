@@ -25559,13 +25559,16 @@ class TestDefaultLetterHead(UnitTestCase):
 		if not frappe.db.exists("Letter Head", install.LETTER_HEAD):
 			self.skipTest("the app's letter head is not imported on this site")
 
+		# The same scope as the code: Frappe 16 has no letter_head_for column.
+		scope = {"letter_head_for": "DocType"} if frappe.get_meta("Letter Head").has_field("letter_head_for") else {}
+
 		frappe.db.savepoint("test_default_letter_head")
 		try:
 			frappe.db.set_value("Letter Head", {"name": ["is", "set"]}, "is_default", 0, update_modified=False)
 			install.set_default_letter_head()
 
 			defaults = frappe.get_all(
-				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+				"Letter Head", filters={"is_default": 1, **scope}, pluck="name"
 			)
 			self.assertEqual(defaults, [install.LETTER_HEAD])
 			self.assertEqual(frappe.db.get_default("letter_head"), install.LETTER_HEAD)
@@ -25573,7 +25576,7 @@ class TestDefaultLetterHead(UnitTestCase):
 			# A second run - the next migrate - changes nothing.
 			install.set_default_letter_head()
 			defaults = frappe.get_all(
-				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+				"Letter Head", filters={"is_default": 1, **scope}, pluck="name"
 			)
 			self.assertEqual(defaults, [install.LETTER_HEAD])
 		finally:
