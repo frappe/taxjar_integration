@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import frappe
 
 from taxjar_integration.patches.backfill_transaction_nature import backfill_if_needed
@@ -420,6 +423,15 @@ def set_default_print_format(doctypes=None):
 # - Grey" without the document type and number. Every print format prints its
 # own title, so the header suits any document.
 LETTER_HEAD = "US Company Letter Head"
+# A fixed path inside the app, the same way taxjar_settings.py reads its
+# product tax categories: nothing a caller passes can change it.
+LETTER_HEAD_FILE = (
+	Path(__file__).resolve().parent
+	/ "taxjar_integration"
+	/ "letter_head"
+	/ "us_company_letter_head"
+	/ "us_company_letter_head.json"
+).resolve()
 LETTER_HEAD_SAVEPOINT = "taxjar_default_letter_head"
 
 
@@ -441,12 +453,34 @@ def set_default_letter_head():
 	"""
 	try:
 		frappe.db.savepoint(LETTER_HEAD_SAVEPOINT)
+		_insert_letter_head()
 		_set_default_letter_head()
 	except Exception:
 		frappe.db.rollback(save_point=LETTER_HEAD_SAVEPOINT)
 		frappe.log_error(title=f"TaxJar: could not make {LETTER_HEAD} the default letter head")
 	else:
 		frappe.db.release_savepoint(LETTER_HEAD_SAVEPOINT)
+
+
+def _insert_letter_head():
+	"""Insert LETTER_HEAD from its JSON where Frappe does not import it.
+
+	Frappe 16 imports no letter_head folder, and its Letter Head has no
+	module, standard or letter_head_for field. So the record never reaches a
+	version 16 site, and the default above has nothing to point at. The same
+	file is the source here, without the fields this Frappe lacks. A Frappe
+	that has "standard" imports the file itself, so this does nothing there.
+
+	Only a missing record is inserted. An admin can edit this one, so a
+	migrate keeps the edits.
+	"""
+	meta = frappe.get_meta("Letter Head")
+	if meta.has_field("standard") or frappe.db.exists("Letter Head", {"name": LETTER_HEAD}):
+		return
+
+	data = json.loads(LETTER_HEAD_FILE.read_text(encoding="utf-8"))
+	values = {key: value for key, value in data.items() if meta.has_field(key)}
+	frappe.get_doc({"doctype": "Letter Head", **values}).insert(ignore_permissions=True)
 
 
 def _set_default_letter_head():

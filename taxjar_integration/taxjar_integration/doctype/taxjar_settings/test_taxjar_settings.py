@@ -25559,13 +25559,16 @@ class TestDefaultLetterHead(UnitTestCase):
 		if not frappe.db.exists("Letter Head", install.LETTER_HEAD):
 			self.skipTest("the app's letter head is not imported on this site")
 
+		# The same scope as the code: Frappe 16 has no letter_head_for column.
+		scope = {"letter_head_for": "DocType"} if frappe.get_meta("Letter Head").has_field("letter_head_for") else {}
+
 		frappe.db.savepoint("test_default_letter_head")
 		try:
 			frappe.db.set_value("Letter Head", {"name": ["is", "set"]}, "is_default", 0, update_modified=False)
 			install.set_default_letter_head()
 
 			defaults = frappe.get_all(
-				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+				"Letter Head", filters={"is_default": 1, **scope}, pluck="name"
 			)
 			self.assertEqual(defaults, [install.LETTER_HEAD])
 			self.assertEqual(frappe.db.get_default("letter_head"), install.LETTER_HEAD)
@@ -25573,7 +25576,7 @@ class TestDefaultLetterHead(UnitTestCase):
 			# A second run - the next migrate - changes nothing.
 			install.set_default_letter_head()
 			defaults = frappe.get_all(
-				"Letter Head", filters={"is_default": 1, "letter_head_for": "DocType"}, pluck="name"
+				"Letter Head", filters={"is_default": 1, **scope}, pluck="name"
 			)
 			self.assertEqual(defaults, [install.LETTER_HEAD])
 		finally:
@@ -25589,6 +25592,47 @@ class TestDefaultLetterHead(UnitTestCase):
 
 		self.assertIn("set_default_letter_head()", inspect.getsource(install.after_install))
 		self.assertIn("set_default_letter_head()", inspect.getsource(install.after_migrate))
+
+	def _insert(self, frappe_16=True, letter_head_exists=False):
+		from taxjar_integration import install
+
+		# Frappe 16's Letter Head has none of these three fields.
+		develop_only = {"module", "standard", "letter_head_for"}
+		meta = MagicMock()
+		meta.has_field.side_effect = lambda field: not (frappe_16 and field in develop_only)
+		with patch.object(install.frappe, "get_meta", return_value=meta), \
+		     patch.object(install.frappe.db, "exists", return_value=letter_head_exists), \
+		     patch.object(install.frappe, "get_doc") as get_doc:
+			install._insert_letter_head()
+		return get_doc
+
+	def test_frappe_16_gets_the_letter_head_from_the_file(self):
+		"""Frappe 16 imports no letter_head folder, so the app inserts it."""
+		from taxjar_integration import install
+
+		get_doc = self._insert()
+
+		values = get_doc.call_args.args[0]
+		self.assertEqual(values["doctype"], "Letter Head")
+		self.assertEqual(values["letter_head_name"], install.LETTER_HEAD)
+		self.assertEqual(values["content"], self._json()["content"])
+		for field in ("module", "standard", "letter_head_for"):
+			self.assertNotIn(field, values)
+		get_doc.return_value.insert.assert_called_once_with(ignore_permissions=True)
+
+	def test_a_letter_head_already_on_the_site_stays_as_it_is(self):
+		self._insert(letter_head_exists=True).assert_not_called()
+
+	def test_a_frappe_that_imports_the_file_inserts_nothing(self):
+		self._insert(frappe_16=False).assert_not_called()
+
+	def test_the_insert_runs_before_the_default_is_chosen(self):
+		import inspect
+
+		from taxjar_integration import install
+
+		source = inspect.getsource(install.set_default_letter_head)
+		self.assertLess(source.index("_insert_letter_head()"), source.index("_set_default_letter_head()"))
 
 	def test_the_file_is_a_standard_letter_head_of_this_app(self):
 		"""Standard and in this app's module, so Frappe imports it on migrate
