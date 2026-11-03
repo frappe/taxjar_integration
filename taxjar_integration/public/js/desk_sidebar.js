@@ -92,20 +92,27 @@ taxjar_integration.collapse_unvisited_sidebar_groups = function (sidebar) {
 /**
  * Run the collapse after every one of the desk's own active-item passes.
  *
- * set_active_workspace_item is the desk's route hook for the sidebar: it runs
- * on each route change, on each sidebar render, and when the sidebar is
- * expanded - the same three moments a group can end up open on a page that is
- * not in it. Wrapping it once on the prototype covers them all, and covers a
- * sidebar built before this file loaded.
+ * highlight_active_item is the desk's route hook for the sidebar: it runs on
+ * each route change, on each sidebar render, and when the sidebar is expanded -
+ * the same three moments a group can end up open on a page that is not in it.
+ * Wrapping it once on the prototype covers them all, and covers a sidebar built
+ * before this file loaded.
+ *
+ * Frappe named it set_active_workspace_item until September 2026. A Frappe
+ * with neither name gets no collapse, rather than a wrapper nothing calls.
  */
 function patch_sidebar_class() {
 	const sidebar_class = window.frappe && frappe.ui && frappe.ui.Sidebar;
 	if (!sidebar_class || sidebar_class.prototype.taxjar_collapse_patched) return;
 
-	const set_active_workspace_item = sidebar_class.prototype.set_active_workspace_item;
+	const hook = ["highlight_active_item", "set_active_workspace_item"].find(
+		(name) => typeof sidebar_class.prototype[name] === "function"
+	);
+	if (!hook) return;
+	const original = sidebar_class.prototype[hook];
 
-	sidebar_class.prototype.set_active_workspace_item = function () {
-		set_active_workspace_item.apply(this, arguments);
+	sidebar_class.prototype[hook] = function () {
+		original.apply(this, arguments);
 		try {
 			taxjar_integration.collapse_unvisited_sidebar_groups(this);
 		} catch (error) {
