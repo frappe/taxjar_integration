@@ -97,7 +97,7 @@ jinja = {
 # Installation
 # ------------
 
-# before_install = "taxjar_integration.install.before_install"
+before_install = "taxjar_integration.install.before_install"
 after_install = "taxjar_integration.install.after_install"
 after_migrate = ["taxjar_integration.install.after_migrate"]
 
