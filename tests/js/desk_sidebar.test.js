@@ -169,21 +169,24 @@ describe("collapse_unvisited_sidebar_groups", () => {
 });
 
 describe("the desk's own route pass", () => {
-	// The desk calls set_active_workspace_item on every route change, on every
+	// The desk calls highlight_active_item on every route change, on every
 	// sidebar render and when the sidebar is expanded. Those are the three
 	// moments a group can be left open on a page that is not in it, so the
 	// collapse rides on that one method rather than on a route event of its own.
-	function install_sidebar_class() {
+	// Frappe named the method set_active_workspace_item until September 2026.
+	function install_sidebar_class(method = "highlight_active_item") {
 		const calls = [];
 		frappe.ui.Sidebar = class Sidebar {
 			constructor(groups) {
 				this.current_module = SIDEBAR_NAME;
 				this.items = groups;
 			}
-			set_active_workspace_item() {
-				calls.push("desk");
-			}
 		};
+		if (method) {
+			frappe.ui.Sidebar.prototype[method] = function () {
+				calls.push("desk");
+			};
+		}
 		return calls;
 	}
 
@@ -193,7 +196,7 @@ describe("the desk's own route pass", () => {
 
 		const group = other_group({ collapsed: false });
 		go_to("/app/taxjar-setup");
-		new frappe.ui.Sidebar([group]).set_active_workspace_item();
+		new frappe.ui.Sidebar([group]).highlight_active_item();
 
 		expect(calls).toEqual(["desk"]);
 		expect(group.close).toHaveBeenCalled();
@@ -202,10 +205,10 @@ describe("the desk's own route pass", () => {
 	it("wraps the desk's method once, however often the file is loaded", () => {
 		install_sidebar_class();
 		load_desk_sidebar();
-		const wrapped = frappe.ui.Sidebar.prototype.set_active_workspace_item;
+		const wrapped = frappe.ui.Sidebar.prototype.highlight_active_item;
 		load_desk_sidebar();
 
-		expect(frappe.ui.Sidebar.prototype.set_active_workspace_item).toBe(wrapped);
+		expect(frappe.ui.Sidebar.prototype.highlight_active_item).toBe(wrapped);
 	});
 
 	it("keeps the desk on its feet when a group cannot be closed", () => {
@@ -219,7 +222,27 @@ describe("the desk's own route pass", () => {
 		};
 		go_to("/app/taxjar-setup");
 
-		expect(() => new frappe.ui.Sidebar([group]).set_active_workspace_item()).not.toThrow();
+		expect(() => new frappe.ui.Sidebar([group]).highlight_active_item()).not.toThrow();
 		expect(calls).toEqual(["desk"]);
+	});
+
+	it("wraps the older name on a Frappe from before the rename", () => {
+		const calls = install_sidebar_class("set_active_workspace_item");
+		load_desk_sidebar();
+
+		const group = other_group({ collapsed: false });
+		go_to("/app/taxjar-setup");
+		new frappe.ui.Sidebar([group]).set_active_workspace_item();
+
+		expect(calls).toEqual(["desk"]);
+		expect(group.close).toHaveBeenCalled();
+	});
+
+	it("adds nothing to a desk that has neither method", () => {
+		install_sidebar_class(null);
+		load_desk_sidebar();
+
+		expect(frappe.ui.Sidebar.prototype.highlight_active_item).toBeUndefined();
+		expect(frappe.ui.Sidebar.prototype.set_active_workspace_item).toBeUndefined();
 	});
 });
