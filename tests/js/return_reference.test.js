@@ -30,7 +30,7 @@ import {
 	record_dialogs,
 } from "./helpers/desk.js";
 
-const RETURN_MAPPER = "erpnext.accounts.doctype.sales_invoice.mapper.make_sales_return";
+const RETURN_MAPPER = "erpnext.accounts.doctype.sales_invoice.sales_invoice.make_sales_return";
 
 let frappe;
 let forms;
@@ -796,8 +796,9 @@ describe("the mapper this calls", () => {
 	// The path is a string here and a function in erpnext. Nothing checks that
 	// they agree, so the suite pins the string in one place and this says
 	// which place.
+	// ERPNext 16 keeps it in sales_invoice.py; develop moved it to mapper.py.
 	it("is the one erpnext's own Return / Credit Note button calls", () => {
-		expect(RETURN_MAPPER).toBe("erpnext.accounts.doctype.sales_invoice.mapper.make_sales_return");
+		expect(RETURN_MAPPER).toBe("erpnext.accounts.doctype.sales_invoice.sales_invoice.make_sales_return");
 	});
 });
 

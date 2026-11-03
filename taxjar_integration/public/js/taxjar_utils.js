@@ -1694,7 +1694,8 @@ taxjar_integration.open_return_credit_note = function (frm, invoice_name) {
 	// document and this one is never written.
 	return Promise.resolve(frm.set_value("is_return", 0)).then(() =>
 		frappe.model.open_mapped_doc({
-			method: "erpnext.accounts.doctype.sales_invoice.mapper.make_sales_return",
+			// ERPNext 16 keeps the mapper in sales_invoice.py; develop moved it to mapper.py.
+			method: "erpnext.accounts.doctype.sales_invoice.sales_invoice.make_sales_return",
 			source_name: invoice_name,
 		})
 	);

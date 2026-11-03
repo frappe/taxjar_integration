@@ -4149,8 +4149,9 @@ def resync_customer(customer_name: str, company: str):
 		# Asking the same list the save hook and the cron ask means there is no
 		# second rule here to fall out of step with them.
 		frappe.throw(
-			_("{0} is not a company this customer syncs to. Check TaxJar Settings, and the "
-			  "customer's own Restrict to Companies.").format(frappe.bold(company)),
+			_("{0} is not set up for TaxJar. Check the companies in TaxJar Setup.").format(
+				frappe.bold(company)
+			),
 			title=_("Company Not Allowed"),
 		)
 

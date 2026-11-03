@@ -312,7 +312,7 @@ function _sync_to_taxjar(frm) {
 				frappe.msgprint({
 					title: __("Nothing to Sync To"),
 					message: __(
-						"No company this customer belongs to is set up for TaxJar. Check TaxJar Settings, and the customer's own Restrict to Companies."
+						"No company on this site is set up for TaxJar. Check the companies in TaxJar Setup."
 					),
 					indicator: "orange",
 				});
