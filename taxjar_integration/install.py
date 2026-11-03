@@ -132,6 +132,36 @@ frappe
 """.strip()
 
 
+# The same floors as [tool.bench.frappe-dependencies] in pyproject.toml. Bench
+# reads that table only on `bench get-app`; `install-app` on a bench that already
+# holds an older ERPNext never sees it, so the install checks again here.
+# ERPNext 16.52.0 is the first release with frappe/erpnext#61541, the corrected
+# United States chart of accounts.
+MAJOR_VERSION = 16
+MINIMUM_VERSIONS = {"Frappe": ("frappe", "16.50.0"), "ERPNext": ("erpnext", "16.52.0")}
+
+
+def before_install():
+	check_versions()
+
+
+def check_versions():
+	from packaging.version import Version
+
+	for title, (app, minimum) in MINIMUM_VERSIONS.items():
+		installed = frappe.get_attr(f"{app}.__version__")
+		# The major, not "< 17.0.0": a develop bench reports 17.0.0-dev, and a
+		# pre-release sorts below its own release, so it would pass that test.
+		version = Version(installed)
+		if version.major != MAJOR_VERSION or version < Version(minimum):
+			frappe.throw(
+				frappe._(
+					"TaxJar Integration needs {0} {1} or later on version {2}. This bench has {0} {3}."
+				).format(title, minimum, MAJOR_VERSION, installed),
+				title=frappe._("Unsupported Version"),
+			)
+
+
 def after_install():
 	setup_taxjar()
 	set_default_print_format()
