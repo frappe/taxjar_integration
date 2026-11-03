@@ -340,12 +340,21 @@ def keep_guided_setup_alert(doc, method):
 # and a credit note.
 PRINT_FORMAT = "US Sales Tax (Invoice, DN, CN)"
 
+# The app's print format for each doctype. The Quotation and Sales Order
+# formats include the Sales Invoice template.
+PRINT_FORMATS = {
+	"Sales Invoice": PRINT_FORMAT,
+	"Quotation": "US Sales Tax Quotation",
+	"Sales Order": "US Sales Tax Sales Order",
+}
 
-def set_default_print_format():
-	"""Make PRINT_FORMAT the default print format of Sales Invoice.
 
-	Only when Sales Invoice has no default yet. A default that the site chose
-	stays.
+def set_default_print_format(doctypes=None):
+	"""Make the app's print format the default of each doctype in PRINT_FORMATS.
+
+	Only when the doctype has no default yet. A default that the site chose
+	stays. doctypes limits the run to those doctypes - a patch that adds a
+	format must not set a Sales Invoice default again that the site cleared.
 
 	On install, and once on an upgrade - see the set_default_print_format
 	patch. Not on every migrate: a site that clears the default later keeps it
@@ -355,24 +364,26 @@ def set_default_print_format():
 	site disables the app, and deletes it when the site uninstalls the app.
 	The print format goes with the app, so the default must go too.
 	"""
-	if frappe.get_meta("Sales Invoice").default_print_format:
-		return
-	if not frappe.db.exists("Print Format", PRINT_FORMAT):
-		return
+	for doctype in doctypes or PRINT_FORMATS:
+		print_format = PRINT_FORMATS[doctype]
+		if frappe.get_meta(doctype).default_print_format:
+			continue
+		if not frappe.db.exists("Print Format", print_format):
+			continue
 
-	frappe.get_doc(
-		{
-			"doctype": "Property Setter",
-			"doctype_or_field": "DocType",
-			"doc_type": "Sales Invoice",
-			"property": "default_print_format",
-			"property_type": "Data",
-			"value": PRINT_FORMAT,
-			"module": "TaxJar Integration",
-			"is_system_generated": 1,
-		}
-	).insert(ignore_permissions=True)
-	frappe.clear_cache(doctype="Sales Invoice")
+		frappe.get_doc(
+			{
+				"doctype": "Property Setter",
+				"doctype_or_field": "DocType",
+				"doc_type": doctype,
+				"property": "default_print_format",
+				"property_type": "Data",
+				"value": print_format,
+				"module": "TaxJar Integration",
+				"is_system_generated": 1,
+			}
+		).insert(ignore_permissions=True)
+		frappe.clear_cache(doctype=doctype)
 
 
 # The app's own letter head: the company block of ERPNext's "Company Letterhead

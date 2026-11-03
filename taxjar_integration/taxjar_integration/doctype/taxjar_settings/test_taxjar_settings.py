@@ -25448,11 +25448,12 @@ class TestUncalledEndpointsAreGone(UnitTestCase):
 
 
 class TestDefaultPrintFormat(UnitTestCase):
-	"""The app's print format becomes the Sales Invoice default, but only where
-	Sales Invoice has no default yet. Its old name, "US Sales Tax Invoice", is
-	renamed before the model sync."""
+	"""The app's print formats become the Sales Invoice, Quotation and Sales
+	Order defaults, but only where the doctype has no default yet. The Sales
+	Invoice format's old name, "US Sales Tax Invoice", is renamed before the
+	model sync."""
 
-	def _set(self, default=None, format_exists=True):
+	def _set(self, default=None, format_exists=True, doctypes=None):
 		from taxjar_integration import install
 
 		meta = MagicMock(default_print_format=default)
@@ -25460,21 +25461,49 @@ class TestDefaultPrintFormat(UnitTestCase):
 		     patch.object(install.frappe.db, "exists", return_value=format_exists), \
 		     patch.object(install.frappe, "get_doc") as get_doc, \
 		     patch.object(install.frappe, "clear_cache"):
-			install.set_default_print_format()
+			install.set_default_print_format(doctypes)
 		return get_doc
+
+	def _rows(self, get_doc):
+		return {c.args[0]["doc_type"]: c.args[0] for c in get_doc.call_args_list}
 
 	def test_an_empty_default_gets_the_app_format(self):
 		from taxjar_integration import install
 
 		get_doc = self._set()
 
-		row = get_doc.call_args.args[0]
-		self.assertEqual(row["doctype"], "Property Setter")
-		self.assertEqual(row["doctype_or_field"], "DocType")
-		self.assertEqual(row["doc_type"], "Sales Invoice")
-		self.assertEqual(row["property"], "default_print_format")
-		self.assertEqual(row["value"], install.PRINT_FORMAT)
-		get_doc.return_value.insert.assert_called_once_with(ignore_permissions=True)
+		rows = self._rows(get_doc)
+		self.assertEqual(set(rows), {"Sales Invoice", "Quotation", "Sales Order"})
+		for doctype, row in rows.items():
+			with self.subTest(doctype=doctype):
+				self.assertEqual(row["doctype"], "Property Setter")
+				self.assertEqual(row["doctype_or_field"], "DocType")
+				self.assertEqual(row["property"], "default_print_format")
+				self.assertEqual(row["value"], install.PRINT_FORMATS[doctype])
+		self.assertEqual(rows["Sales Invoice"]["value"], install.PRINT_FORMAT)
+		self.assertEqual(get_doc.return_value.insert.call_count, 3)
+		get_doc.return_value.insert.assert_called_with(ignore_permissions=True)
+
+	def test_the_upgrade_patch_leaves_the_sales_invoice_default_alone(self):
+		"""The set_default_print_format patch already ran for Sales Invoice. A
+		site that cleared that default keeps it clear."""
+		from taxjar_integration.patches import set_quotation_and_sales_order_print_formats as patch_module
+
+		with patch.object(patch_module, "set_default_print_format") as set_default:
+			patch_module.execute()
+		doctypes = set_default.call_args.args[0]
+		self.assertEqual(set(doctypes), {"Quotation", "Sales Order"})
+
+		self.assertEqual(set(self._rows(self._set(doctypes=doctypes))), {"Quotation", "Sales Order"})
+
+	def test_the_upgrade_patch_runs_after_the_model_sync(self):
+		"""The sync creates the two print formats; the patch needs them."""
+		import os
+
+		path = os.path.join(frappe.get_app_path("taxjar_integration"), "patches.txt")
+		with open(path) as f:
+			post = f.read().split("[post_model_sync]")[1]
+		self.assertIn("taxjar_integration.patches.set_quotation_and_sales_order_print_formats", post)
 
 	def test_the_row_names_the_app_module(self):
 		"""Frappe ignores the row while the app is disabled, and deletes it when
@@ -25512,6 +25541,26 @@ class TestDefaultPrintFormat(UnitTestCase):
 		with open(os.path.join(base, f"{folder}.html")) as f:
 			self.assertIn(f"print_format/{folder}/{folder}.css", f.read())
 		self.assertTrue(os.path.exists(os.path.join(base, f"{folder}.css")))
+
+	def test_the_quotation_and_sales_order_formats_include_the_invoice_template(self):
+		"""One layout for the three doctypes. A copy of the template would drift
+		from the invoice the day the next fix lands only in one of them."""
+		import os
+
+		from taxjar_integration import install
+
+		root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "print_format"))
+		shared = frappe.scrub(install.PRINT_FORMAT)
+		for doctype in ("Quotation", "Sales Order"):
+			with self.subTest(doctype=doctype):
+				folder = frappe.scrub(install.PRINT_FORMATS[doctype])
+				with open(os.path.join(root, folder, f"{folder}.json")) as f:
+					data = json.load(f)
+				self.assertEqual(data["name"], install.PRINT_FORMATS[doctype])
+				self.assertEqual(data["doc_type"], doctype)
+				self.assertEqual(data["standard"], "Yes")
+				with open(os.path.join(root, folder, f"{folder}.html")) as f:
+					self.assertIn(f'{{% include "taxjar_integration/taxjar_integration/print_format/{shared}/{shared}.html" %}}', f.read())
 
 	def test_the_rename_runs_before_the_model_sync(self):
 		"""After the sync, the new JSON would make a second record and leave
