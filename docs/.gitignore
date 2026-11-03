@@ -1,0 +1,6 @@
+node_modules
+.vitepress/cache
+.vitepress/dist
+
+# The root .gitignore ignores *.md; the docs pages are Markdown.
+!*.md
