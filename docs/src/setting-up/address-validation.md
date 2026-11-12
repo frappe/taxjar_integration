@@ -64,6 +64,12 @@ For an address outside the US, no region matches the state. The app uses `XX`, w
 
 For an address outside the US, you can type a different region code. The app keeps your code when you change the state. For a US address, **State Code (US)** always changes with the state.
 
+### Addresses Made Before the Install
+
+When you install or update the app, it fills in the empty state codes and region codes of the addresses that are already on the site. It uses the same state names as the Address form, and it does not change a code that is already set.
+
+If an address has no state, or a state that the app cannot find, its code stays empty. Open the address and select the code.
+
 ## Address in a Quick Entry
 
 The **New Address** dialog and the **New Customer** quick entry work like the Address form:

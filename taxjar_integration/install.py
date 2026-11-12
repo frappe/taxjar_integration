@@ -1,5 +1,6 @@
 import frappe
 
+from taxjar_integration.patches.backfill_address_codes import backfill_address_codes
 from taxjar_integration.patches.backfill_transaction_nature import backfill_if_needed
 from taxjar_integration.taxjar_integration.doctype.taxjar_settings.taxjar_settings import (
 	add_product_tax_categories,
@@ -177,6 +178,11 @@ def setup_taxjar():
 	# an install and a migrate. The probe inside keeps a migrate with nothing to
 	# do to one indexed read.
 	backfill_if_needed()
+
+	# The same gap on addresses. The Address hooks fill the State Code and the
+	# Region Code on save only, and an address from before the install is not
+	# saved again.
+	backfill_address_codes()
 
 	add_product_tax_categories()
 
