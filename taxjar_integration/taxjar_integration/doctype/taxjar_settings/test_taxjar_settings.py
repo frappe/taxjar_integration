@@ -12037,6 +12037,7 @@ class TestInstallSetup(UnitTestCase):
 
 		with patch("taxjar_integration.install.make_custom_fields") as mock_make, \
 		     patch("taxjar_integration.install.backfill_if_needed") as mock_backfill, \
+		     patch("taxjar_integration.install.backfill_address_codes") as mock_address_backfill, \
 		     patch("taxjar_integration.install.add_product_tax_categories") as mock_cats, \
 		     patch("taxjar_integration.install.sync_all_company_tax_templates") as mock_sync, \
 		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax") as mock_hide, \
@@ -12044,6 +12045,7 @@ class TestInstallSetup(UnitTestCase):
 		     patch("taxjar_integration.install.add_guided_setup_alert") as mock_alert, \
 		     patch("taxjar_integration.install.set_workspace_roles", create=True) as mock_roles:
 			install.setup_taxjar()
+		mock_address_backfill.assert_called_once()
 		return mock_make, mock_cats, mock_sync, mock_hide, mock_desc, mock_alert, mock_roles, mock_backfill
 
 	def test_after_install_runs_full_setup(self):
@@ -12071,6 +12073,7 @@ class TestInstallSetup(UnitTestCase):
 		order = []
 		with patch("taxjar_integration.install.make_custom_fields", side_effect=lambda: order.append("fields")), \
 		     patch("taxjar_integration.install.backfill_if_needed", side_effect=lambda: order.append("backfill")), \
+		     patch("taxjar_integration.install.backfill_address_codes", side_effect=lambda: order.append("addresses")), \
 		     patch("taxjar_integration.install.add_product_tax_categories"), \
 		     patch("taxjar_integration.install.sync_all_company_tax_templates"), \
 		     patch("taxjar_integration.install.hide_legacy_exempt_from_sales_tax"), \
@@ -12079,7 +12082,9 @@ class TestInstallSetup(UnitTestCase):
 		     patch("taxjar_integration.install.set_workspace_roles", create=True):
 			install.setup_taxjar()
 
-		self.assertEqual(order, ["fields", "backfill"])
+		# The address backfill writes the two code columns, which
+		# make_custom_fields() creates.
+		self.assertEqual(order, ["fields", "backfill", "addresses"])
 
 	def test_setup_applies_the_category_fixture_on_every_run(self):
 		"""Not only on the first run. create_tax_categories() inserts a code the
