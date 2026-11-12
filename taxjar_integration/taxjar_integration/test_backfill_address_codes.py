@@ -7,28 +7,27 @@ from taxjar_integration.patches.backfill_address_codes import backfill_address_c
 def _make_address(title, country, state, pincode="10001"):
 	"""An Address with both code fields empty, as on a site from before the install.
 
-	The insert runs the Address hooks. When TaxJar is on, these fill the codes
-	and refuse a US state with no match. So the insert uses no state, and the
-	set_value call writes the state and empties the codes without a change to
-	"modified".
+	db_insert() writes the row and runs no validate. So the Address hooks do not
+	fill the codes, and the site needs no default Address Template. The CI site
+	has none.
 	"""
+	now = frappe.utils.now_datetime()
 	address = frappe.get_doc(
-		dict(
-			doctype="Address",
-			address_title=title,
-			address_line1="1 Main St",
-			city="Springfield",
-			country=country,
-			state="California" if country == "United States" else "",
-			pincode=pincode,
-		)
-	).insert(ignore_permissions=True)
-	frappe.db.set_value(
-		"Address",
-		address.name,
-		{"state": state, "taxjar_state_code": None, "taxjar_region_code": ""},
-		update_modified=False,
+		doctype="Address",
+		name=f"{title}-{frappe.generate_hash(length=8)}",
+		address_title=title,
+		address_type="Billing",
+		address_line1="1 Main St",
+		city="Springfield",
+		country=country,
+		state=state,
+		pincode=pincode,
+		taxjar_state_code=None,
+		taxjar_region_code="",
+		creation=now,
+		modified=now,
 	)
+	address.db_insert()
 	return address.name
 
 
