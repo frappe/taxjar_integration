@@ -92,7 +92,10 @@ put_preview() {
 	rsync -a --delete "$build/" "$site/$DOCS_PATH/pr-preview/pr-$number/"
 }
 
+# Most pull requests have no preview. Then there is nothing to remove, and the
+# status 1 tells publish to stop with no commit.
 drop_preview() {
+	[ -d "$site/$DOCS_PATH/pr-preview/pr-$number" ] || return 1
 	rm -rf "$site/$DOCS_PATH/pr-preview/pr-$number"
 }
 
@@ -103,7 +106,11 @@ publish() {
 	local message="$1" change="$2" attempt
 	for attempt in 1 2 3 4 5; do
 		open_site
-		"$change"
+		if ! "$change"; then
+			echo "Nothing to publish."
+			close_site
+			return 0
+		fi
 		# .nojekyll: Pages must serve the files as they are. CNAME: the domain.
 		touch "$site/.nojekyll"
 		echo "$DOMAIN" > "$site/CNAME"
