@@ -234,7 +234,7 @@ jobs:
       frappe_branch: ${{ needs.plan.outputs.base_ref }}
 
   # Lints and builds the docs of the pull request. This job runs the code of
-  # the pull request, so its token can only read. The next job publishes.
+  # the pull request, so its token can only read. The report job publishes.
   docs-build:
     needs: plan
     if: needs.plan.outputs.command == 'run' && needs.plan.outputs.run_docs == 'true'
@@ -294,32 +294,6 @@ jobs:
           path: docs-preview
           retention-days: 3
 
-  # Publishes the build to gh-pages. This job can write to the repository, so
-  # it checks out develop and not the pull request: it only copies the build.
-  docs-preview:
-    needs: [plan, docs-build]
-    runs-on: ubuntu-latest
-    name: Docs preview
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Clone
-        uses: actions/checkout@v4
-
-      - name: Get the build
-        uses: actions/download-artifact@v4
-        with:
-          name: docs-preview
-          path: ${{ runner.temp }}/docs-preview
-
-      - name: Publish the preview to gh-pages
-        env:
-          BUILD: ${{ runner.temp }}/docs-preview
-          NUMBER: ${{ needs.plan.outputs.number }}
-        run: .github/scripts/docs-pages.sh deploy-preview "$BUILD" "$NUMBER"
-
   # Claude proposes a docs change, on the docs runner. The proposal comes as a
   # comment on the pull request, and a reviewer approves it before the push.
   # After the push, update-docs.yml starts this workflow again for the new
@@ -340,23 +314,53 @@ jobs:
       pr: ${{ needs.plan.outputs.number }}
       instructions: ${{ needs.plan.outputs.instructions }}
 
-  # Sets the results on the commit of the pull request and posts one comment.
-  # It does not wait for the docs proposal: that one waits for a reviewer.
+  # Publishes the preview, sets the results on the commit of the pull request
+  # and posts one comment. These are one job, and not two, because each job
+  # waits for a runner: the preview link is in the comment as soon as the
+  # preview is on gh-pages.
+  #
+  # This job can write to the repository. So it checks out develop and not the
+  # pull request, and it only copies the build of the docs-build job. It does
+  # not wait for the docs proposal: that one waits for a reviewer.
   report:
-    needs: [plan, ci, docs-build, docs-preview]
+    needs: [plan, ci, docs-build]
     if: always() && needs.plan.result == 'success' && needs.plan.outputs.command == 'run'
     runs-on: ubuntu-latest
-    name: Report
+    name: Preview and report
 
     permissions:
       actions: read
+      contents: write
       pull-requests: write
       statuses: write
 
     steps:
+      - name: Clone
+        if: needs.docs-build.result == 'success'
+        uses: actions/checkout@v4
+
+      - name: Get the build
+        if: needs.docs-build.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-preview
+          path: ${{ runner.temp }}/docs-preview
+
+      - name: Publish the preview to gh-pages
+        id: preview
+        if: needs.docs-build.result == 'success'
+        env:
+          BUILD: ${{ runner.temp }}/docs-preview
+          NUMBER: ${{ needs.plan.outputs.number }}
+        run: .github/scripts/docs-pages.sh deploy-preview "$BUILD" "$NUMBER"
+
+      # Also after a failed publish: the pull request must get its results.
       - name: Set the checks and post the results
+        if: always()
         uses: actions/github-script@v7
         env:
+          DOCS_BUILD: ${{ needs.docs-build.result }}
+          PREVIEW: ${{ steps.preview.outcome }}
           NUMBER: ${{ needs.plan.outputs.number }}
           HEAD_SHA: ${{ needs.plan.outputs.head_sha }}
           RUN_CODE: ${{ needs.plan.outputs.run_code }}
@@ -407,8 +411,8 @@ jobs:
 
             const notes = [];
             if (env.RUN_DOCS === 'true') {
-              if (!passed('Docs build')) await set('Docs', false, 'The docs lint or build failed.');
-              else if (!passed('Docs preview')) await set('Docs', false, 'The docs build passed. The preview failed.');
+              if (env.DOCS_BUILD !== 'success') await set('Docs', false, 'The docs lint or build failed.');
+              else if (env.PREVIEW !== 'success') await set('Docs', false, 'The docs build passed. The preview failed.');
               else {
                 await set('Docs', true, 'The docs build passed. This check links to the preview.', preview);
                 notes.push(
