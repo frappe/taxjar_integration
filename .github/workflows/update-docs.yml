@@ -1,14 +1,19 @@
 name: Update docs
 
+# The PR run (pr-run.yml) calls this workflow. It does so when a person with
+# write access comments /update-docs on a pull request, and when /run finds a
+# change to app code with no change to docs/. Nothing else starts it.
 on:
-  issue_comment:
-    types: [created]
-
-# One run per PR at a time. A second /update-docs waits for the first, so two
-# runs never push to the same branch together.
-concurrency:
-  group: update-docs-${{ github.event.issue.number }}
-  cancel-in-progress: false
+  workflow_call:
+    inputs:
+      pr:
+        description: The number of the pull request.
+        type: string
+        required: true
+      instructions:
+        description: The text after /update-docs. It goes to Claude as extra instructions.
+        type: string
+        default: ''
 
 # The runner's own deploy key, with write access to the fork only. Set here
 # and not in ~/.ssh/config, so other tools of the runner user keep their keys.
@@ -17,25 +22,28 @@ env:
 
 jobs:
   # Runs on the self-hosted runner, where Claude Code is installed and signed
-  # in. The repository is public, so only a comment from someone with write
-  # access starts it: the job checks out the PR branch and runs its npm
-  # install, and that must never happen for a stranger's comment.
+  # in. These two jobs are the only ones that use that runner. The repository
+  # is public, so the PR run starts this job only for someone with write
+  # access: the job checks out the PR branch and runs its npm install, and that
+  # must never happen for a stranger's comment.
   #
   # Text after "/update-docs" goes to Claude as extra instructions. That is how
   # a reviewer asks for changes: reject the pending apply job, then comment
   # "/update-docs <what to change>".
   propose:
-    if: >-
-      github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/update-docs') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: [self-hosted, docs]
     timeout-minutes: 30
     name: Propose docs
 
+    # One proposal per PR at a time. A second one waits for the first.
+    concurrency:
+      group: update-docs-${{ inputs.pr }}
+      cancel-in-progress: false
+
     permissions:
       contents: read
       pull-requests: write
+      statuses: write
 
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
@@ -47,23 +55,19 @@ jobs:
       - name: Read the PR
         id: pr
         uses: actions/github-script@v7
+        env:
+          PR: ${{ inputs.pr }}
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.issue.number,
+              pull_number: Number(process.env.PR),
             });
             core.setOutput('head_repo', pr.head.repo.full_name);
             core.setOutput('head_ref', pr.head.ref);
             core.setOutput('head_sha', pr.head.sha);
             core.setOutput('base_ref', pr.base.ref);
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: 'eyes',
-            });
 
       # Over SSH with the runner's own key, not with GITHUB_TOKEN: the PR
       # branch is usually on a fork, and GITHUB_TOKEN cannot push to a fork.
@@ -78,12 +82,16 @@ jobs:
           git checkout --quiet "$HEAD_SHA"
           git fetch --quiet "https://github.com/${GITHUB_REPOSITORY}.git" "$BASE_REF:base"
 
+      # Before Claude, because Claude runs the docs build to check its work.
+      - name: Install the docs tools
+        working-directory: pr/docs
+        run: npm ci --no-audit --no-fund
+
       - name: Update the docs
         working-directory: pr
         env:
-          COMMENT: ${{ github.event.comment.body }}
+          EXTRA: ${{ inputs.instructions }}
         run: |
-          EXTRA="${COMMENT#/update-docs}"
           claude -p --permission-mode acceptEdits \
             --allowedTools "Read,Edit,Write,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(python3 scripts/lint.py),Bash(npm run docs:build)" \
             "Update the docs in docs/ for the code changes of this pull request.
@@ -99,7 +107,6 @@ jobs:
       - name: Check the docs
         working-directory: pr/docs
         run: |
-          npm ci --no-audit --no-fund
           python3 scripts/lint.py
           npm run docs:build
 
@@ -124,6 +131,8 @@ jobs:
         uses: actions/github-script@v7
         env:
           CHANGED: ${{ steps.diff.outputs.changed }}
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         with:
           script: |
             const fs = require('fs');
@@ -157,9 +166,23 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: Number(process.env.PR),
               body,
             });
+            // /run left the "Docs" check as pending. With no change to
+            // propose, the check passes. With a proposal, the docs commit gets
+            // its own PR run, and that run sets the check.
+            if (process.env.CHANGED === 'false' && process.env.HEAD_SHA) {
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: process.env.HEAD_SHA,
+                context: 'Docs',
+                state: 'success',
+                description: 'Claude found no docs change to make.',
+                target_url: run,
+              });
+            }
 
   # Waits for a required reviewer of the "docs-approval" environment. Nothing
   # reaches the PR branch until a person approves the diff in the comment.
@@ -172,6 +195,7 @@ jobs:
     environment: docs-approval
 
     permissions:
+      actions: write
       contents: read
       pull-requests: write
 
@@ -201,15 +225,31 @@ jobs:
         uses: actions/github-script@v7
         env:
           OUTCOME: ${{ job.status }}
+          PR: ${{ inputs.pr }}
         with:
           script: |
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = process.env.OUTCOME === 'success'
-              ? 'Docs commit pushed to this PR.'
+              ? 'Docs commit pushed to this PR. A PR run started for the new commit.'
               : `The docs commit failed. The PR may have changed since the proposal. See the [run log](${run}), or comment \`/update-docs\` again.`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: Number(process.env.PR),
               body,
             });
+            // The docs commit is a new commit, and a new commit has no checks.
+            // Nobody has to comment /run again: this starts the PR run.
+            if (process.env.OUTCOME === 'success') {
+              const { data: repository } = await github.rest.repos.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'pr-run.yml',
+                ref: repository.default_branch,
+                inputs: { pr: process.env.PR },
+              });
+            }

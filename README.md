@@ -148,6 +148,17 @@ python scripts/audit_conventions.py
 4. Run the server tests and the client tests.
 5. Open a pull request against `develop`. Give the steps to reproduce the problem and the expected result.
 
+No check runs when you open a pull request or push to it. A person with write access starts the checks with a comment on the pull request:
+
+| Comment | Effect |
+|---|---|
+| `/run` | Runs the checks for the newest commit. If `docs/` changed, it also builds the docs and publishes a preview. If app code changed and `docs/` did not, it starts a docs proposal. |
+| `/update-docs <instructions>` | Makes a new docs proposal. The instructions are optional. |
+
+If your code change needs no docs change, write the word `no-docs` in the body of the pull request.
+
+A fix that version 16 also needs gets the label `backport-version-16`. When the pull request merges, a second pull request opens against `version-16` with the same commits. The public docs come from `version-16`, so a docs change needs this label too.
+
 ## License
 
 MIT. Refer to [license.txt](license.txt).

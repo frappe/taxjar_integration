@@ -1,14 +1,29 @@
 name: CI
 
+# Nothing starts this workflow by itself. The PR run (pr-run.yml) calls it when
+# a person comments /run on a pull request, and gives it the commit to test.
+# The PR run reads the result of each job by its name, and sets the required
+# checks "Static Analysis", "Client" and "Server" on the pull request. Keep the
+# three job names.
 on:
-  push:
-    branches:
-      - version-16
-  pull_request:
+  workflow_call:
+    inputs:
+      repository:
+        description: The repository that holds the commit. For a pull request from a fork, the fork.
+        type: string
+        required: true
+      ref:
+        description: The commit to test.
+        type: string
+        required: true
+      frappe_branch:
+        description: The Frappe and ERPNext branch to test against. The base branch of the pull request.
+        type: string
+        required: true
 
-concurrency:
-  group: version-16-taxjar_integration-${{ github.event.number }}
-  cancel-in-progress: true
+# The jobs run the code of the pull request. They get a token that can only read.
+permissions:
+  contents: read
 
 jobs:
   # The desk scripts decide what TaxJar does for a company on the form itself,
@@ -23,6 +38,10 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       # 24, the same major the server job uses, because frappe's package.json
       # sets engines.node to >=24 on both develop and version-16. This job
@@ -48,6 +67,10 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -123,6 +146,10 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       # 3.14, because this job builds frappe: its pyproject pins
       # requires-python to >=3.14,<3.15 on both develop and version-16, and
@@ -170,20 +197,22 @@ jobs:
       - name: Setup
         run: |
           pip install frappe-bench
-          bench init --frappe-branch version-16 --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
+          bench init --frappe-branch "$FRAPPE_BRANCH" --skip-redis-config-generation --skip-assets --python "$(which python)" ~/frappe-bench
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
           mysql --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+        env:
+          FRAPPE_BRANCH: ${{ inputs.frappe_branch }}
 
       # ERPNext comes first because hooks.py names it in required_apps, and
       # the app reads erpnext for get_region, get_exchange_rate and the
       # company defaults. Without it, install-app stopped with "No module
       # named 'erpnext'". --skip-assets leaves the asset build to the single
-      # `bench build` below, rather than running it twice. --branch version-16
-      # matches the frappe that bench init cloned.
+      # `bench build` below, rather than running it twice. --branch matches
+      # the frappe that bench init cloned.
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
-          bench get-app --branch version-16 --skip-assets erpnext
+          bench get-app --branch "$FRAPPE_BRANCH" --skip-assets erpnext
           bench get-app taxjar_integration $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
@@ -192,6 +221,7 @@ jobs:
           bench build
         env:
           CI: 'Yes'
+          FRAPPE_BRANCH: ${{ inputs.frappe_branch }}
 
       - name: Run Tests
         working-directory: /home/runner/frappe-bench
