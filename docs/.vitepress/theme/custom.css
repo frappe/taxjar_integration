@@ -355,3 +355,51 @@
 	width: 230px;
 	white-space: nowrap;
 }
+
+/* The preview of a pull request marks what the pull request changed. See
+   .vitepress/changes.ts. The public site has none of these classes. */
+.vp-doc .docs-changes-banner {
+	margin: 0 0 24px;
+	padding: 10px 14px;
+	border: 1px solid var(--vp-c-green-2);
+	border-radius: 8px;
+	background: var(--vp-c-green-soft);
+	font-size: 14px;
+	line-height: 22px;
+}
+
+.vp-doc .docs-changes-banner a {
+	margin-left: 6px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+/* A green bar at the left of the block, with a gap, and a light background. */
+.vp-doc .docs-changed {
+	border-radius: 2px;
+	background: var(--vp-c-green-soft);
+	box-shadow:
+		-10px 0 0 0 var(--vp-c-bg),
+		-13px 0 0 0 var(--vp-c-green-2);
+}
+
+.vp-doc li.docs-changed {
+	box-shadow: none;
+}
+
+/* A code block has its own background. The wrapper shows the bar only. */
+.vp-doc div.docs-changed {
+	background: none;
+}
+
+.vp-doc tr.docs-changed,
+.vp-doc tr.docs-changed td,
+.vp-doc tr.docs-changed th {
+	background: var(--vp-c-green-soft);
+	box-shadow: none;
+}
+
+.vp-doc tr.docs-changed td:first-child,
+.vp-doc tr.docs-changed th:first-child {
+	box-shadow: inset 3px 0 0 0 var(--vp-c-green-2);
+}
