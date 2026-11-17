@@ -1,7 +1,23 @@
-import { defineConfig } from 'vitepress'
+import { defineConfig, type HeadConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { withMermaid } from 'vitepress-plugin-mermaid'
-import { base, pageHead, siteUrl, writeDiscoveryFiles } from './seo'
+import { base, indexable, pageHead, siteUrl, writeDiscoveryFiles } from './seo'
+
+// Cloudflare Web Analytics. It records each page change of the site by itself.
+// A build without CF_BEACON_TOKEN, such as a local build, has no analytics.
+const beaconToken = process.env.CF_BEACON_TOKEN
+const analyticsHead: HeadConfig[] = beaconToken
+	? [
+			[
+				'script',
+				{
+					defer: '',
+					src: 'https://static.cloudflareinsights.com/beacon.min.js',
+					'data-cf-beacon': JSON.stringify({ token: beaconToken }),
+				},
+			],
+		]
+	: []
 
 const description = 'US sales tax for ERPNext, calculated by TaxJar and filed with AutoFile.'
 
@@ -99,7 +115,7 @@ export default withMermaid(defineConfig({
 	cleanUrls: true,
 	lastUpdated: false,
 	// Search and discovery: see seo.ts. The sitemap needs the public address.
-	sitemap: siteUrl ? { hostname: `${siteUrl}/` } : undefined,
+	sitemap: indexable ? { hostname: `${siteUrl}/` } : undefined,
 	transformHead: ({ pageData }) => pageHead(pageData),
 	buildEnd: (siteConfig) => writeDiscoveryFiles(siteConfig, sidebar, description),
 	// Content tabs: :::tabs with == Live and == Sandbox.
@@ -114,7 +130,10 @@ export default withMermaid(defineConfig({
 			md.use(tabsMarkdownPlugin)
 		},
 	},
-	head: [['link', { rel: 'icon', type: 'image/png', href: `${base}logo.png` }]],
+	head: [
+		['link', { rel: 'icon', type: 'image/png', href: `${base}logo.png` }],
+		...analyticsHead,
+	],
 	themeConfig: {
 		logo: '/logo.png',
 		nav: [
