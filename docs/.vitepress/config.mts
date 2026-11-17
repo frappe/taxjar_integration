@@ -1,6 +1,7 @@
 import { defineConfig, type HeadConfig } from 'vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 import { withMermaid } from 'vitepress-plugin-mermaid'
+import { markChanges } from './changes'
 import { base, indexable, pageHead, siteUrl, writeDiscoveryFiles } from './seo'
 
 // Cloudflare Web Analytics. It records each page change of the site by itself.
@@ -128,6 +129,8 @@ export default withMermaid(defineConfig({
 		},
 		config(md) {
 			md.use(tabsMarkdownPlugin)
+			// The preview of a pull request marks what the pull request changed.
+			md.use(markChanges)
 		},
 	},
 	head: [
