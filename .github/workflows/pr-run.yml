@@ -69,6 +69,7 @@ jobs:
       run_docs: ${{ steps.plan.outputs.run_docs }}
       propose_docs: ${{ steps.plan.outputs.propose_docs }}
       remind_backport: ${{ steps.plan.outputs.remind_backport }}
+      docs_pages: ${{ steps.plan.outputs.docs_pages }}
 
     steps:
       - name: Read the command and the pull request
@@ -175,6 +176,20 @@ jobs:
             core.setOutput('run_docs', String(docs.length > 0));
             core.setOutput('propose_docs', String(proposeDocs));
             core.setOutput('remind_backport', String(remindBackport));
+            // The changed docs pages, for the links in the result comment.
+            // docs/src/setting-up/guided-setup.md is the page
+            // setting-up/guided-setup. A part (src/parts) is not a page.
+            const pages = files
+              .filter((file) => /^docs\/src\/(?!parts\/).+\.md$/.test(file.filename))
+              .slice(0, 40)
+              .map((file) => ({
+                route: file.filename
+                  .slice('docs/src/'.length)
+                  .replace(/(^|\/)index\.md$/, '$1')
+                  .replace(/\.md$/, ''),
+                status: file.status,
+              }));
+            core.setOutput('docs_pages', JSON.stringify(pages));
             if (command !== 'run') return;
 
             // The ruleset of develop and version-* requires the first three
@@ -230,12 +245,20 @@ jobs:
       contents: read
 
     steps:
+      # With the full history: the build compares the docs with the base
+      # branch, and it needs the commit where the pull request left it.
       - name: Clone the pull request
         uses: actions/checkout@v4
         with:
           repository: ${{ needs.plan.outputs.head_repo }}
           ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Get the base branch
+        env:
+          BASE_REF: ${{ needs.plan.outputs.base_ref }}
+        run: git fetch --quiet "https://github.com/${GITHUB_REPOSITORY}.git" "+refs/heads/${BASE_REF}:refs/remotes/base/${BASE_REF}"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -244,11 +267,16 @@ jobs:
 
       # DOCS_INDEX=false: the preview has the path of the public site, and
       # search engines must not index it. See docs/.vitepress/seo.ts.
+      # DOCS_DIFF_BASE: the build marks what the pull request changed, and
+      # DOCS_LIVE_URL is the link from a changed page to the live page. See
+      # docs/.vitepress/changes.ts.
       - name: Build the docs
         working-directory: docs
         env:
           DOCS_URL: ${{ env.DOCS_URL }}/pr-preview/pr-${{ needs.plan.outputs.number }}
           DOCS_INDEX: 'false'
+          DOCS_DIFF_BASE: refs/remotes/base/${{ needs.plan.outputs.base_ref }}
+          DOCS_LIVE_URL: ${{ env.DOCS_URL }}
         run: |
           npm ci --no-audit --no-fund
           python3 scripts/lint.py
@@ -335,6 +363,7 @@ jobs:
           RUN_DOCS: ${{ needs.plan.outputs.run_docs }}
           PROPOSE_DOCS: ${{ needs.plan.outputs.propose_docs }}
           REMIND_BACKPORT: ${{ needs.plan.outputs.remind_backport }}
+          DOCS_PAGES: ${{ needs.plan.outputs.docs_pages }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -382,7 +411,21 @@ jobs:
               else if (!passed('Docs preview')) await set('Docs', false, 'The docs build passed. The preview failed.');
               else {
                 await set('Docs', true, 'The docs build passed. This check links to the preview.', preview);
-                notes.push(`**Docs preview:** ${preview}`);
+                notes.push(
+                  `**Docs preview:** ${preview}\nThe preview marks the changed blocks. GitHub Pages can need some minutes before the links open.`,
+                );
+                // One row for each changed page: the page in the preview, and
+                // the same page of the live docs.
+                const pages = JSON.parse(env.DOCS_PAGES || '[]');
+                if (pages.length) {
+                  const row = ({ route, status }) => {
+                    const name = `\`${route || 'home'}\``;
+                    if (status === 'removed') return `| ${name} | Removed | [Live](${env.DOCS_URL}/${route}) |`;
+                    const isNew = status === 'added' || status === 'renamed';
+                    return `| ${name} | [Proposed](${preview}${route}) | ${isNew ? 'New page' : `[Live](${env.DOCS_URL}/${route})`} |`;
+                  };
+                  notes.push(['| Changed page | Proposed | Live |', '|---|---|---|', ...pages.map(row)].join('\n'));
+                }
               }
             } else if (env.PROPOSE_DOCS === 'true') {
               rows.push('| Docs | ⏳ A docs proposal started. |');
