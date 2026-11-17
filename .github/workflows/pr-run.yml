@@ -1,0 +1,411 @@
+name: PR run
+
+# Nothing runs when a pull request opens or gets a new commit. A person with
+# write access starts the work with a comment on the pull request:
+#
+#   /run                          Run all that this pull request needs, for
+#                                 its newest commit.
+#   /update-docs <instructions>   Make a new docs proposal. The instructions
+#                                 are optional.
+#
+# /run reads the changed files and decides:
+#
+#   App code changed              Static Analysis, Client and Server (ci.yml).
+#   docs/ changed                 Lint and build the docs, and publish a preview.
+#   App code changed, docs/ not   Claude proposes a docs change
+#                                 (update-docs.yml), unless the body of the
+#                                 pull request has the word no-docs.
+#
+# The run sets its results on the newest commit of the pull request, and posts
+# one comment. A workflow that a comment starts runs from develop, so this one
+# file serves the pull requests to each branch.
+#
+# Two workflows start this one by themselves, with the number of a pull
+# request: backport.yml, for a backport that it opened, and update-docs.yml,
+# after it pushed a docs commit.
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The number of the pull request
+        type: string
+        required: true
+
+# Each job asks for what it needs.
+permissions: {}
+
+env:
+  # The public address of the docs. A preview is at
+  # <DOCS_URL>/pr-preview/pr-<number>/.
+  DOCS_URL: https://regional.frappe.io/usa/sales-tax
+
+jobs:
+  # Decides if the comment is a command, who sent it, and what the pull request
+  # needs. The other jobs read its outputs.
+  plan:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request &&
+       (startsWith(github.event.comment.body, '/run') ||
+        startsWith(github.event.comment.body, '/update-docs')))
+    runs-on: ubuntu-latest
+    name: Plan
+
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+
+    outputs:
+      command: ${{ steps.plan.outputs.command }}
+      instructions: ${{ steps.plan.outputs.instructions }}
+      number: ${{ steps.plan.outputs.number }}
+      head_repo: ${{ steps.plan.outputs.head_repo }}
+      head_sha: ${{ steps.plan.outputs.head_sha }}
+      base_ref: ${{ steps.plan.outputs.base_ref }}
+      run_code: ${{ steps.plan.outputs.run_code }}
+      run_docs: ${{ steps.plan.outputs.run_docs }}
+      propose_docs: ${{ steps.plan.outputs.propose_docs }}
+      remind_backport: ${{ steps.plan.outputs.remind_backport }}
+
+    steps:
+      - name: Read the command and the pull request
+        id: plan
+        uses: actions/github-script@v7
+        env:
+          PR: ${{ inputs.pr }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const comment = context.payload.comment;
+            let command = 'run';
+            let instructions = '';
+
+            if (comment) {
+              // "/run" alone, or "/update-docs" with optional text after it.
+              const match = comment.body.trim().match(/^\/(run|update-docs)(?:\s+([\s\S]+))?$/);
+              if (!match || (match[1] === 'run' && match[2])) {
+                core.info('The comment is not a command.');
+                return;
+              }
+              // The jobs run the code of the pull request, and one of them
+              // runs on the docs runner. So a stranger cannot start them.
+              const { data: access } = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: comment.user.login,
+              });
+              if (!['admin', 'write'].includes(access.permission)) {
+                core.info(`${comment.user.login} has no write access.`);
+                return;
+              }
+              command = match[1];
+              instructions = match[2] || '';
+              await github.rest.reactions.createForIssueComment({
+                owner,
+                repo,
+                comment_id: comment.id,
+                content: 'eyes',
+              });
+            }
+
+            const number = comment ? context.issue.number : Number(process.env.PR);
+            if (!Number.isInteger(number) || number < 1) {
+              core.setFailed(`"${process.env.PR}" is not the number of a pull request.`);
+              return;
+            }
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            if (pr.state !== 'open') {
+              core.setFailed(`Pull request #${number} is not open.`);
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: number,
+              per_page: 100,
+            });
+            const names = files.map((file) => file.filename);
+            // User-facing code: the app, but not its tests and patches.
+            const code = names.filter(
+              (name) =>
+                name.startsWith('taxjar_integration/') &&
+                !/(^|\/)tests?\/|\/test_[^/]+\.(py|js)$|\/patches\//.test(name),
+            );
+            const docs = names.filter((name) => name.startsWith('docs/'));
+
+            // "no-docs" in the body of the pull request, as a word of its own
+            // and not in an HTML comment: the author decided that the code
+            // change needs no docs change.
+            const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
+            const noDocs = /(^|[^\w-])no-docs(?![\w-])/i.test(body);
+            // A pull request that backport.yml opened. The first pull request
+            // already decided about the docs.
+            const isBackport =
+              pr.head.repo.full_name === `${owner}/${repo}` && /^backport-\d+-to-/.test(pr.head.ref);
+
+            // A change to app code with no change to docs/ is how the docs
+            // drift: nobody decides to leave them behind, they just are. So
+            // that case gets a docs proposal.
+            let docsState;
+            if (docs.length) docsState = ['pending', 'The docs build is in progress.'];
+            else if (!code.length) docsState = ['success', 'No app code changed.'];
+            else if (noDocs) docsState = ['success', 'The body of the pull request says no-docs.'];
+            else if (isBackport) docsState = ['success', 'Backport: the first pull request decided about the docs.'];
+            else docsState = ['pending', 'Code changed, docs/ did not. A docs proposal started.'];
+            const proposeDocs = code.length > 0 && !docs.length && !noDocs && !isBackport;
+
+            // The public docs come from version-16. A docs change on develop
+            // reaches them only through a backport.
+            const remindBackport =
+              pr.base.ref === context.payload.repository.default_branch &&
+              docs.length > 0 &&
+              !pr.labels.some((label) => /^backport-/.test(label.name));
+
+            core.setOutput('command', command);
+            core.setOutput('instructions', instructions);
+            core.setOutput('number', String(number));
+            core.setOutput('head_repo', pr.head.repo.full_name);
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('base_ref', pr.base.ref);
+            core.setOutput('run_code', String(code.length > 0));
+            core.setOutput('run_docs', String(docs.length > 0));
+            core.setOutput('propose_docs', String(proposeDocs));
+            core.setOutput('remind_backport', String(remindBackport));
+            if (command !== 'run') return;
+
+            // The ruleset of develop and version-* requires the first three
+            // checks. A run that a comment starts does not put its checks on
+            // the pull request, so this workflow sets them itself. A pull
+            // request with no app code gets them as passed, or it could not
+            // merge.
+            const target_url = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const codeState = code.length
+              ? ['pending', 'In progress.']
+              : ['success', 'Skipped: no app code changed.'];
+            const statuses = {
+              'Static Analysis': codeState,
+              Client: codeState,
+              Server: codeState,
+              Docs: docsState,
+            };
+            for (const [name, [state, description]] of Object.entries(statuses)) {
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: pr.head.sha,
+                context: name,
+                state,
+                description,
+                target_url,
+              });
+            }
+
+  # The three required checks. The jobs run the code of the pull request, with
+  # a token that can only read.
+  ci:
+    needs: plan
+    if: needs.plan.outputs.command == 'run' && needs.plan.outputs.run_code == 'true'
+    name: CI
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      repository: ${{ needs.plan.outputs.head_repo }}
+      ref: ${{ needs.plan.outputs.head_sha }}
+      frappe_branch: ${{ needs.plan.outputs.base_ref }}
+
+  # Lints and builds the docs of the pull request. This job runs the code of
+  # the pull request, so its token can only read. The next job publishes.
+  docs-build:
+    needs: plan
+    if: needs.plan.outputs.command == 'run' && needs.plan.outputs.run_docs == 'true'
+    runs-on: ubuntu-latest
+    name: Docs build
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clone the pull request
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.plan.outputs.head_repo }}
+          ref: ${{ needs.plan.outputs.head_sha }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # DOCS_INDEX=false: the preview has the path of the public site, and
+      # search engines must not index it. See docs/.vitepress/seo.ts.
+      - name: Build the docs
+        working-directory: docs
+        env:
+          DOCS_URL: ${{ env.DOCS_URL }}/pr-preview/pr-${{ needs.plan.outputs.number }}
+          DOCS_INDEX: 'false'
+        run: |
+          npm ci --no-audit --no-fund
+          python3 scripts/lint.py
+          npm run docs:build
+
+      # The build folder is in .vitepress, a hidden folder, and the upload
+      # leaves hidden files out. So the build moves to a plain folder first.
+      - name: Move the build
+        run: mv docs/.vitepress/dist docs-preview
+
+      - name: Keep the build for the preview job
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-preview
+          path: docs-preview
+          retention-days: 3
+
+  # Publishes the build to gh-pages. This job can write to the repository, so
+  # it checks out develop and not the pull request: it only copies the build.
+  docs-preview:
+    needs: [plan, docs-build]
+    runs-on: ubuntu-latest
+    name: Docs preview
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+
+      - name: Get the build
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-preview
+          path: ${{ runner.temp }}/docs-preview
+
+      - name: Publish the preview to gh-pages
+        env:
+          BUILD: ${{ runner.temp }}/docs-preview
+          NUMBER: ${{ needs.plan.outputs.number }}
+        run: .github/scripts/docs-pages.sh deploy-preview "$BUILD" "$NUMBER"
+
+  # Claude proposes a docs change, on the docs runner. The proposal comes as a
+  # comment on the pull request, and a reviewer approves it before the push.
+  # After the push, update-docs.yml starts this workflow again for the new
+  # commit.
+  docs-proposal:
+    needs: plan
+    if: >-
+      needs.plan.outputs.command == 'update-docs' ||
+      (needs.plan.outputs.command == 'run' && needs.plan.outputs.propose_docs == 'true')
+    name: Docs proposal
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: write
+      statuses: write
+    uses: ./.github/workflows/update-docs.yml
+    with:
+      pr: ${{ needs.plan.outputs.number }}
+      instructions: ${{ needs.plan.outputs.instructions }}
+
+  # Sets the results on the commit of the pull request and posts one comment.
+  # It does not wait for the docs proposal: that one waits for a reviewer.
+  report:
+    needs: [plan, ci, docs-build, docs-preview]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.command == 'run'
+    runs-on: ubuntu-latest
+    name: Report
+
+    permissions:
+      actions: read
+      pull-requests: write
+      statuses: write
+
+    steps:
+      - name: Set the checks and post the results
+        uses: actions/github-script@v7
+        env:
+          NUMBER: ${{ needs.plan.outputs.number }}
+          HEAD_SHA: ${{ needs.plan.outputs.head_sha }}
+          RUN_CODE: ${{ needs.plan.outputs.run_code }}
+          RUN_DOCS: ${{ needs.plan.outputs.run_docs }}
+          PROPOSE_DOCS: ${{ needs.plan.outputs.propose_docs }}
+          REMIND_BACKPORT: ${{ needs.plan.outputs.remind_backport }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const env = process.env;
+            const number = Number(env.NUMBER);
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const preview = `${env.DOCS_URL}/pr-preview/pr-${number}/`;
+
+            // The jobs of ci.yml have the name "CI / <job>" in this run.
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+              owner,
+              repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+            const passed = (name) =>
+              jobs.some((job) => (job.name === name || job.name.endsWith(` / ${name}`)) && job.conclusion === 'success');
+
+            const rows = [];
+            const set = async (name, ok, description, target_url = run) => {
+              rows.push(`| ${name} | ${ok ? '✅' : '❌'} ${description} |`);
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: env.HEAD_SHA,
+                context: name,
+                state: ok ? 'success' : 'failure',
+                description,
+                target_url,
+              });
+            };
+
+            for (const name of ['Static Analysis', 'Client', 'Server']) {
+              if (env.RUN_CODE === 'true') {
+                const ok = passed(name);
+                await set(name, ok, ok ? 'Passed.' : 'Failed.');
+              } else {
+                rows.push(`| ${name} | ➖ Skipped: no app code changed. |`);
+              }
+            }
+
+            const notes = [];
+            if (env.RUN_DOCS === 'true') {
+              if (!passed('Docs build')) await set('Docs', false, 'The docs lint or build failed.');
+              else if (!passed('Docs preview')) await set('Docs', false, 'The docs build passed. The preview failed.');
+              else {
+                await set('Docs', true, 'The docs build passed. This check links to the preview.', preview);
+                notes.push(`**Docs preview:** ${preview}`);
+              }
+            } else if (env.PROPOSE_DOCS === 'true') {
+              rows.push('| Docs | ⏳ A docs proposal started. |');
+              notes.push(
+                'Code changed and `docs/` did not, so a docs proposal started. It comes as a comment on this pull request. If this change needs no docs, add the word `no-docs` to the body of the pull request.',
+              );
+            } else {
+              rows.push('| Docs | ➖ No docs change is necessary. |');
+            }
+            if (env.REMIND_BACKPORT === 'true') {
+              notes.push(
+                '**Reminder:** the public docs come from `version-16`. Add the label `backport-version-16` if this docs change must reach them.',
+              );
+            }
+
+            const body = [
+              `### PR run for \`${env.HEAD_SHA.slice(0, 7)}\``,
+              '',
+              '| Check | Result |',
+              '|---|---|',
+              ...rows,
+              '',
+              ...notes.flatMap((note) => [note, '']),
+              `[Run log](${run}). A new commit needs a new \`/run\`.`,
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number: number, body });

@@ -1,0 +1,61 @@
+name: Docs deploy
+
+# Publishes the docs of version-16 to https://regional.frappe.io/usa/sales-tax.
+# The docs on develop describe features that version 16 does not have, so the
+# public site comes from version-16. A docs change on develop reaches the site
+# through its backport.
+on:
+  push:
+    branches:
+      - version-16
+    paths:
+      - docs/**
+      - .github/workflows/docs-deploy.yml
+      - .github/scripts/docs-pages.sh
+  workflow_dispatch:
+
+# The job pushes the build to the gh-pages branch.
+permissions:
+  contents: write
+
+# One deploy at a time. A newer push waits for the deploy in progress.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+env:
+  # The public address of the docs. The build reads the base path, the
+  # canonical URLs and the sitemap from it. See docs/.vitepress/seo.ts.
+  DOCS_URL: https://regional.frappe.io/usa/sales-tax
+  # The Cloudflare Web Analytics token. The build adds no analytics script
+  # while this repository variable is empty.
+  CF_BEACON_TOKEN: ${{ vars.CF_BEACON_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+
+    steps:
+      # Always version-16, also for a manual start from a different branch.
+      - name: Clone
+        uses: actions/checkout@v4
+        with:
+          ref: version-16
+
+      # No dependency cache. The PR run saves caches from the code of pull
+      # requests, and this job can write to the repository.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build the docs
+        working-directory: docs
+        run: |
+          npm ci --no-audit --no-fund
+          python3 scripts/lint.py
+          npm run docs:build
+
+      - name: Publish to gh-pages
+        run: .github/scripts/docs-pages.sh deploy-root docs/.vitepress/dist

@@ -1,0 +1,31 @@
+name: Docs preview cleanup
+
+# The PR run publishes a preview of the docs for a pull request. This workflow
+# deletes that preview when the pull request closes. pull_request_target runs
+# this file from the base branch, and the job never checks out the pull
+# request, so a fork cannot change what runs here.
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+
+env:
+  DOCS_URL: https://regional.frappe.io/usa/sales-tax
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    name: Remove the preview
+
+    steps:
+      - name: Clone
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Remove the preview from gh-pages
+        env:
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: .github/scripts/docs-pages.sh remove-preview "$NUMBER"
