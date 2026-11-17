@@ -3,10 +3,14 @@ import path from 'node:path'
 import type { HeadConfig, PageData, SiteConfig } from 'vitepress'
 
 // DOCS_URL is the public address of the docs, with its path, for example
-// https://docs.frappe.io/regional/usa. A build with DOCS_URL is the public site:
+// https://regional.frappe.io/usa/sales-tax. A build with DOCS_URL is the public site:
 // search engines may index it, and it has a sitemap and canonical URLs. A build
 // without DOCS_URL is a preview, and every page asks search engines not to index it.
 export const siteUrl = (process.env.DOCS_URL || '').replace(/\/+$/, '')
+// DOCS_INDEX=false keeps the path of DOCS_URL and stops indexing. A pull
+// request preview uses it: the preview is at a sub-path of the public site, and
+// search engines must not index it.
+export const indexable = Boolean(siteUrl) && process.env.DOCS_INDEX !== 'false'
 export const base = siteUrl ? new URL(siteUrl).pathname.replace(/\/?$/, '/') : '/'
 
 const siteName = 'TaxJar Integration for ERPNext'
@@ -24,7 +28,7 @@ function absolute(urlPath: string) {
 }
 
 export function pageHead(pageData: PageData): HeadConfig[] {
-	if (!siteUrl) return [['meta', { name: 'robots', content: 'noindex, nofollow' }]]
+	if (!indexable) return [['meta', { name: 'robots', content: 'noindex, nofollow' }]]
 
 	const url = absolute(pagePath(pageData.relativePath))
 	const title = pageData.frontmatter.title || pageData.title
@@ -97,7 +101,7 @@ export function writeDiscoveryFiles(siteConfig: SiteConfig, sidebar: SidebarGrou
 
 	fs.writeFileSync(
 		path.join(outDir, 'robots.txt'),
-		siteUrl
+		indexable
 			? `User-agent: *\nAllow: /\n\nSitemap: ${absolute('sitemap.xml')}\n`
 			: 'User-agent: *\nDisallow: /\n',
 	)
