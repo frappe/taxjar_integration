@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://regional.frappe.io/usa/sales-tax/sitemap.xml

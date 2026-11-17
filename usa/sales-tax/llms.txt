@@ -1,0 +1,58 @@
+# TaxJar Integration for ERPNext
+
+> US sales tax for ERPNext, calculated by TaxJar and filed with AutoFile.
+
+## Getting Started
+
+- [Introduction](https://regional.frappe.io/usa/sales-tax/getting-started/introduction.md): What TaxJar does for US sales tax: the rates of each jurisdiction, state nexus, product and customer exemptions, and return filing with AutoFile.
+- [Walkthrough](https://regional.frappe.io/usa/sales-tax/getting-started/walkthrough.md): A video of all TaxJar features in ERPNext, and a tour of the TaxJar workspace: setup, transactions, exemptions, and tax returns and liability.
+- [Installation](https://regional.frappe.io/usa/sales-tax/getting-started/installation.md): Install the TaxJar Integration app on Frappe Cloud, with Docker or with bench, and see what the app adds to your ERPNext site when you install it.
+
+## Setting Up
+
+- [Guided Setup](https://regional.frappe.io/usa/sales-tax/setting-up/guided-setup.md): Do the six steps of TaxJar Setup: connect each company, map the ledgers, set the company address, turn on the features and load your nexus states.
+- [Roles & Permissions](https://regional.frappe.io/usa/sales-tax/setting-up/roles-and-permissions.md): Give each person the ERPNext roles for their TaxJar work, see the exact rights of each task and page, and build a custom role with fewer rights.
+- [Updating your nexus](https://regional.frappe.io/usa/sales-tax/setting-up/updating-your-nexus.md): Add a nexus state in TaxJar, update the nexus in ERPNext at once, and fix the daily nexus update when the notification says that it failed.
+- [Address Validation](https://regional.frappe.io/usa/sales-tax/setting-up/address-validation.md): The address fields that TaxJar needs, how the app fills in and checks the US state code, the shipping address dialogs, and the company ship-from address.
+- [Before you go live](https://regional.frappe.io/usa/sales-tax/setting-up/before-you-go-live.md): Sandbox mode is for tests and TaxJar does not record its transactions. Change to Live mode, connect each company with its Live token, and check the result.
+
+## Sales Tax
+
+- [Tax Computation](https://regional.frappe.io/usa/sales-tax/sales-tax/tax-computation.md): When TaxJar calculates the tax, the data that it uses, why a document can have no tax, and what happens when a quotation becomes an order and an invoice.
+- [Verify Tax Applicability](https://regional.frappe.io/usa/sales-tax/sales-tax/verify-tax-applicability.md): Read the TaxJar tab and the TaxJar Tax Breakdown of a document to see why TaxJar charged the tax, which address set the rate, and the tax for each jurisdiction.
+- [Additional Charges & Discounts](https://regional.frappe.io/usa/sales-tax/sales-tax/additional-charges-and-discounts.md): Enter shipping in the shipping row, see how TaxJar treats other fees and negative rows, and use Additional Discount for a discount on the whole document.
+- [Print Format](https://regional.frappe.io/usa/sales-tax/sales-tax/print-format.md): Print quotations, sales orders, invoices, credit notes and debit notes in the US Sales Tax formats, with the tax for each jurisdiction, or build your own format.
+
+## Transaction Sync
+
+- [Syncing to TaxJar](https://regional.frappe.io/usa/sales-tax/transaction-sync/syncing-to-taxjar.md): Send sales invoices, credit and debit notes to TaxJar on submit, check the sync status, see why some are excluded, and send a failed one again.
+- [Resolve Failed Syncs](https://regional.frappe.io/usa/sales-tax/transaction-sync/resolve-failed-syncs.md): Find the failed transactions of a period, read each error, fix the cause, and send the transactions to TaxJar again with Resync or Sync to TaxJar.
+
+## Sales Adjustments
+
+- [Credit & Debit Notes](https://regional.frappe.io/usa/sales-tax/sales-adjustments/credit-and-debit-notes.md): Make a credit note to give money back or a debit note to charge more. Both get sales tax on save and go to TaxJar on submit, with different rules.
+- [Cancellations & Amendments](https://regional.frappe.io/usa/sales-tax/sales-adjustments/cancellations-and-amendments.md): Choose between a credit note and a cancellation, cancel an invoice that TaxJar holds, and fix an invoice whose cancellation did not reach TaxJar.
+
+## Tax Exemptions
+
+- [Customer Tax Exemption](https://regional.frappe.io/usa/sales-tax/tax-exemptions/customer-tax-exemption.md): Set a Wholesale, Government or Other exemption on one customer or on many customers, choose the exempt states, and check that TaxJar received it.
+- [Transaction Tax Exemption](https://regional.frappe.io/usa/sales-tax/tax-exemptions/transaction-tax-exemption.md): Mark one quotation, sales order or sales invoice as exempt when the customer usually pays sales tax, and choose the reason for the exemption.
+- [Item Tax Exemption](https://regional.frappe.io/usa/sales-tax/tax-exemptions/item-tax-exemption.md): Tell TaxJar how states tax each item with a product tax category, for example food, clothing or software. Set it on the item before you sell.
+
+## Tax Return Filing
+
+- [Period Close & Filing](https://regional.frappe.io/usa/sales-tax/tax-return-filing/period-close-and-filing.md): Before each filing deadline, check on the Transaction Sync page that every invoice of the period is in TaxJar, then review the return in TaxJar.
+
+## Troubleshoot
+
+- [Missing Sales Tax](https://regional.frappe.io/usa/sales-tax/troubleshoot/missing-sales-tax.md): Find why a quotation, sales order or sales invoice has no sales tax from TaxJar, with the cause and the fix for each answer on the TaxJar tab.
+- [Messages & Errors](https://regional.frappe.io/usa/sales-tax/troubleshoot/messages-and-errors.md): Every message of the TaxJar Integration in one place: setup, saving a document, addresses, sync errors, credit notes, customers, access and the upgrade.
+- [API Log](https://regional.frappe.io/usa/sales-tax/troubleshoot/api-log.md): Find the TaxJar API Log entries of one document or one company, read the request and the response, and set how many days the app keeps the logs.
+
+## Reference
+
+- [Scheduled Jobs](https://regional.frappe.io/usa/sales-tax/reference/scheduled-jobs.md): The jobs that the TaxJar Integration runs on a schedule: the daily nexus update, the weekly category update, the 15-minute retries and the log cleanup.
+- [TaxJar Pages & Settings](https://regional.frappe.io/usa/sales-tax/reference/taxjar-pages-and-settings.md): Each TaxJar page in the ERPNext sidebar, the TaxJar fields on ERPNext forms, and the labels in TaxJar Setup and the TaxJar Settings form.
+- [Upgrade from Version 15](https://regional.frappe.io/usa/sales-tax/reference/upgrade-from-version-15.md): What the upgrade from TaxJar version 15 changes, the setup steps after the upgrade, and how to check which older invoices TaxJar already holds.
+- [Usage Data & Feedback](https://regional.frappe.io/usa/sales-tax/reference/usage-data-and-feedback.md): The usage data that the TaxJar Integration sends to Frappe, the data that it never sends, how to turn usage data off, and when the feedback card shows.
+- [Glossary](https://regional.frappe.io/usa/sales-tax/reference/glossary.md): Short definitions of the sales tax and TaxJar terms in these docs, from AutoFile and nexus to exemption, product tax category, sync and Sandbox mode.
