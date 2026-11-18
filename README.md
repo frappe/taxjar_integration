@@ -13,7 +13,7 @@ Manage sales tax lifecycle from tax computation to return filing.
 [![ERPNext version-16](https://img.shields.io/badge/ERPNext-version--16-0089ff.svg)](https://github.com/frappe/erpnext)
 [![GitHub stars](https://img.shields.io/github/stars/frappe/taxjar_integration?style=social)](https://github.com/frappe/taxjar_integration/stargazers)
 
-[Documentation](https://regional.frappe.io/usa/sales-tax/) · [Installation](#installation) · [Get started](#get-started) · [User guide](#user-guide)
+[Documentation](https://regional.frappe.io/usa/sales-tax/) · [Installation](#installation)
 
 ![US sales tax in ERPNext with TaxJar: customer exemption, Sales Invoice tax breakdown, print format, nexus and transaction sync](.github/images/overview.png)
 
