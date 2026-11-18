@@ -4,6 +4,10 @@
 	border: 1px solid var(--vp-c-divider);
 	border-radius: 8px;
 	margin: 16px 0;
+	/* Each image has a width and a height from the build (.vitepress/images.ts).
+	   They give the shape. The image still fits the width of the text. */
+	max-width: 100%;
+	height: auto;
 }
 
 :root {
